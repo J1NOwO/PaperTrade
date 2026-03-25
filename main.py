@@ -2506,9 +2506,71 @@ def _record_snapshot(user_id: int, conn) -> None:
     )
 
 
+def _backfill_snapshots(user_id: int, conn) -> None:
+    """Reconstruct equity curve from transaction history for users with no snapshots yet."""
+    existing = conn.execute(
+        "SELECT COUNT(*) as n FROM portfolio_snapshots WHERE user_id = ?", (user_id,)
+    ).fetchone()["n"]
+    if existing > 0:
+        return
+    txns = conn.execute(
+        """SELECT action, symbol, quantity, price, total, currency, timestamp
+           FROM transactions WHERE user_id = ? ORDER BY timestamp""",
+        (user_id,),
+    ).fetchall()
+    if not txns:
+        return
+    try:
+        fx = get_exchange_rate()["usd_to_krw"]
+    except Exception:
+        fx = 1380.0
+    cash: dict = {"KRW": 0.0, "USD": 0.0}
+    holdings: dict = {}  # symbol -> {qty, avg_price, currency}
+    for txn in txns:
+        act, sym, qty, price, total, cur, ts = (
+            txn["action"], txn["symbol"], txn["quantity"],
+            txn["price"], txn["total"], txn["currency"], txn["timestamp"],
+        )
+        if act == "deposit":
+            cash[cur] = cash.get(cur, 0.0) + total
+        elif act in ("buy", "lev_open"):
+            cash[cur] = cash.get(cur, 0.0) - total
+            if sym in holdings:
+                old = holdings[sym]
+                nq = old["qty"] + qty
+                holdings[sym] = {"qty": nq, "avg_price": (old["avg_price"] * old["qty"] + price * qty) / nq, "currency": cur}
+            else:
+                holdings[sym] = {"qty": qty, "avg_price": price, "currency": cur}
+        elif act in ("sell", "lev_close", "lev_liquidated"):
+            cash[cur] = cash.get(cur, 0.0) + total
+            if sym in holdings:
+                holdings[sym]["qty"] = max(0.0, holdings[sym]["qty"] - qty)
+        elif act == "short_open":
+            cash[cur] = cash.get(cur, 0.0) - total
+        elif act == "short_close":
+            cash[cur] = cash.get(cur, 0.0) + total
+        elif act == "exchange":
+            if cur == "KRW":
+                cash["KRW"] = cash.get("KRW", 0.0) - total
+                cash["USD"] = cash.get("USD", 0.0) + qty
+            else:
+                cash["USD"] = cash.get("USD", 0.0) - total
+                cash["KRW"] = cash.get("KRW", 0.0) + qty
+        cash_krw = cash.get("KRW", 0.0) + cash.get("USD", 0.0) * fx
+        hold_krw = sum(
+            h["qty"] * h["avg_price"] * (fx if h["currency"] == "USD" else 1.0)
+            for h in holdings.values() if h["qty"] > 0
+        )
+        conn.execute(
+            "INSERT INTO portfolio_snapshots (user_id, timestamp, equity_krw) VALUES (?, ?, ?)",
+            (user_id, ts, round(cash_krw + hold_krw, 0)),
+        )
+
+
 @app.get("/api/analytics/equity")
 def api_analytics_equity(user_id: int = Depends(require_auth)):
     with get_db() as conn:
+        _backfill_snapshots(user_id, conn)
         rows = conn.execute(
             "SELECT timestamp, equity_krw FROM portfolio_snapshots WHERE user_id = ? ORDER BY timestamp",
             (user_id,),
