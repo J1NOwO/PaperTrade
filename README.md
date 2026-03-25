@@ -12,7 +12,7 @@
 
 ## Demo
 
-![PaperTrade Screenshot][SCREENSHOT HERE]
+![PaperTrade Screenshot](https://via.placeholder.com/800x400?text=Screenshot+Coming+Soon)
 
 > Live demo: `http://localhost:8000` (run locally — see [Getting Started](#getting-started))
 
@@ -62,22 +62,22 @@ I built this because most paper-trading platforms either restrict access behind 
 
 ```mermaid
 graph LR
-    subgraph Frontend ["Browser (Single-Page App)"]
-        UI["Bootstrap 5 + Vanilla JS"]
-        Chart["TradingView Lightweight Charts"]
+    subgraph Frontend ["🖥️ Browser (Single-Page App)"]
+        UI["⚡ Bootstrap 5 + Vanilla JS"]
+        Chart["📊 TradingView Lightweight Charts"]
     end
 
-    subgraph Backend ["FastAPI (Python)"]
-        API["REST API\n/api/stock\n/api/order\n/api/portfolio\n/api/exchange"]
-        Auth["Auth Middleware\nBearer Token → user_id"]
+    subgraph Backend ["🐍 FastAPI (Python)"]
+        API["🔀 REST API\n/api/stock\n/api/order\n/api/portfolio\n/api/exchange"]
+        Auth["🔐 Auth Middleware\nBearer Token → user_id"]
     end
 
-    subgraph DataSources ["External Data"]
-        YF["yfinance\n(US stocks, Crypto,\nKRW=X rate)"]
-        KRX["pykrx\n(KRX stocks)"]
+    subgraph DataSources ["🌐 External Data"]
+        YF["📈 yfinance\n(US stocks, Crypto,\nKRW=X rate)"]
+        KRX["🇰🇷 pykrx\n(KRX stocks)"]
     end
 
-    DB[("SQLite\nusers · sessions\nbalances · holdings\ntransactions")]
+    DB[("🗄️ SQLite\nusers · sessions\nbalances · holdings\ntransactions")]
 
     UI -->|"Bearer token\nJSON requests"| Auth
     Auth --> API
@@ -86,6 +86,17 @@ graph LR
     API -->|"READ / WRITE"| DB
     API -->|"JSON response"| UI
     UI --> Chart
+
+    style Frontend fill:#1e3a5f,stroke:#4a9eff,color:#e8f4ff
+    style Backend fill:#1a3a1a,stroke:#4caf50,color:#e8ffe8
+    style DataSources fill:#3a1a1a,stroke:#ff6b6b,color:#ffe8e8
+    style UI fill:#0d2137,stroke:#4a9eff,color:#a8d4ff
+    style Chart fill:#0d2137,stroke:#4a9eff,color:#a8d4ff
+    style API fill:#0d1f0d,stroke:#4caf50,color:#a8ffa8
+    style Auth fill:#0d1f0d,stroke:#4caf50,color:#a8ffa8
+    style YF fill:#1f0d0d,stroke:#ff6b6b,color:#ffa8a8
+    style KRX fill:#1f0d0d,stroke:#ff6b6b,color:#ffa8a8
+    style DB fill:#2a1f0d,stroke:#ffb347,color:#ffe8a8
 ```
 
 ---
