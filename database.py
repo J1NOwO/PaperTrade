@@ -144,6 +144,15 @@ def _migrate(conn):
         """)
         if "position_type" not in tx_cols:
             conn.execute("ALTER TABLE transactions ADD COLUMN position_type TEXT DEFAULT 'LONG'")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL,
+                timestamp  TEXT    NOT NULL,
+                equity_krw REAL    NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
         return  # already new schema
 
     # Drop old single-user tables (data loss is acceptable on schema upgrade)
