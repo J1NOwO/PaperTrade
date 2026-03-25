@@ -1,0 +1,4105 @@
+<!DOCTYPE html>
+<html lang="ko" data-bs-theme="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PaperTrade — 주식 시뮬레이터</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"/>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root {
+    --bg-body:  #0d1117;
+    --bg-card:  #1a1d23;
+    --bg-chart: #131722;
+    --accent:   #2962ff;
+    --up:       #26a69a;
+    --down:     #ef5350;
+    --border:   #30363d;
+    --chip-bg:  #21262d;
+    --chip-fg:  #c9d1d9;
+    --tab-fg:   #8b949e;
+    --tab-active-fg: #fff;
+    --tbl-th:   #8b949e;
+    --tbl-stripe: #1f2329;
+    --empty-fg: #8b949e;
+  }
+  [data-bs-theme="light"] {
+    --bg-body:  #f0f2f5;
+    --bg-card:  #ffffff;
+    --bg-chart: #f8fafc;
+    --border:   #dee2e6;
+    --chip-bg:  #e9ecef;
+    --chip-fg:  #495057;
+    --tab-fg:   #6c757d;
+    --tab-active-fg: #212529;
+    --tbl-th:   #6c757d;
+    --tbl-stripe: #f8f9fa;
+    --empty-fg: #6c757d;
+  }
+
+  body { background: var(--bg-body); font-size: 0.9rem; }
+
+  /* ── Full-page overlays ── */
+  .full-overlay {
+    position: fixed; inset: 0; z-index: 9999;
+    background: var(--bg-body);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .auth-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2.5rem;
+    width: min(440px, 94vw);
+  }
+  .setup-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2.5rem;
+    width: min(480px, 94vw);
+  }
+  .app-logo { font-size: 2rem; font-weight: 800; color: var(--accent); }
+
+  /* ── Auth tabs ── */
+  .auth-tabs { display: flex; gap: .5rem; margin-bottom: 1.5rem; }
+  .auth-tab {
+    flex: 1; padding: .45rem; border-radius: 8px; border: 1px solid var(--border);
+    background: transparent; color: var(--tab-fg); font-weight: 600;
+    cursor: pointer; transition: .15s;
+  }
+  .auth-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* ── Header ── */
+  #header {
+    background: var(--bg-card); border-bottom: 1px solid var(--border);
+    padding: .6rem 1.2rem;
+    display: flex; align-items: center; gap: .7rem; flex-wrap: wrap;
+  }
+  .logo { font-size: 1.25rem; font-weight: 800; color: var(--accent); letter-spacing: -.5px; }
+  .market-badge {
+    display: inline-flex; align-items: center; gap: .35rem;
+    padding: .2rem .6rem; border-radius: 20px; font-size: .75rem; font-weight: 600;
+  }
+  .market-badge.open  { background: rgba(38,166,154,.15); color: var(--up);   border: 1px solid rgba(38,166,154,.3); }
+  .market-badge.closed{ background: rgba(239,83,80,.1);   color: var(--down); border: 1px solid rgba(239,83,80,.25); }
+  .dot { width:7px; height:7px; border-radius:50%; }
+  .dot.open  { background: var(--up);  box-shadow: 0 0 5px var(--up); }
+  .dot.closed{ background: var(--down); }
+  .balance-chip {
+    display: inline-flex; align-items: center; gap: .3rem;
+    background: var(--chip-bg); border-radius: 8px; padding: .25rem .7rem;
+    font-size: .8rem; color: var(--chip-fg);
+  }
+  .balance-chip span { font-weight: 700; color: var(--tab-active-fg); }
+  .user-chip {
+    display: inline-flex; align-items: center; gap: .3rem;
+    background: rgba(41,98,255,.12); border: 1px solid rgba(41,98,255,.3);
+    border-radius: 20px; padding: .2rem .65rem;
+    font-size: .78rem; font-weight: 600; color: var(--accent);
+  }
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+
+  /* ── Toggle pills ── */
+  .toggle-pill { display: inline-flex; border-radius: 20px; overflow: hidden; border: 1px solid var(--border); font-size: .75rem; }
+  .toggle-pill button {
+    border: none; padding: .2rem .55rem; font-size: .75rem; font-weight: 600;
+    background: transparent; color: var(--tab-fg); cursor: pointer; transition: .15s;
+  }
+  .toggle-pill button.active { background: var(--accent); color: #fff; }
+
+  /* ── Tabs ── */
+  .nav-tabs { border-bottom: 1px solid var(--border); padding: 0 1rem; background: var(--bg-card); }
+  .nav-tabs .nav-link { color: var(--tab-fg); border: none; padding: .7rem 1.1rem; font-weight: 500; }
+  .nav-tabs .nav-link.active { color: var(--tab-active-fg); background: transparent; border-bottom: 2px solid var(--accent); }
+  .nav-tabs .nav-link:hover  { color: var(--tab-active-fg); }
+
+  .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; }
+  .stock-price  { font-size: 2rem; font-weight: 700; }
+  .stock-change { font-size: 1rem; }
+  .up   { color: var(--up); }
+  .down { color: var(--down); }
+  /* Korean stock market convention: up = red, down = blue */
+  .kr-up   { color: #ef5350 !important; }
+  .kr-down { color: #1976d2 !important; }
+
+  #chart-container { width: 100%; height: 360px; border-radius: 10px; overflow: hidden; }
+
+  /* ── Google Finance period tabs ── */
+  .gf-period-tabs {
+    display: flex; gap: 0; border-bottom: 1px solid var(--border);
+    margin-bottom: 0; padding: 0;
+  }
+  .gf-period-tab {
+    border: none; background: transparent; color: var(--tab-fg);
+    padding: .45rem .8rem; font-size: .8rem; font-weight: 600;
+    cursor: pointer; border-bottom: 2px solid transparent;
+    margin-bottom: -1px; transition: .15s;
+  }
+  .gf-period-tab:hover { color: var(--tab-active-fg); }
+  .gf-period-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── Stock header (Google Finance style) ── */
+  .gf-stock-header { padding: 1rem 0 .5rem; }
+  .gf-stock-name { font-size: 1.1rem; font-weight: 700; }
+  .gf-stock-ticker { font-size: .82rem; color: var(--tab-fg); }
+  .gf-price-main { font-size: 2.4rem; font-weight: 700; line-height: 1.1; }
+  .gf-price-change { font-size: .95rem; font-weight: 600; }
+
+  /* ── Stats grid ── */
+  .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem .5rem; margin-top: .75rem; }
+  @media (max-width: 576px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+  .stat-item { padding: .5rem .75rem; background: var(--chip-bg); border-radius: 8px; }
+  .stat-label { font-size: .72rem; color: var(--tab-fg); margin-bottom: .15rem; }
+  .stat-val { font-size: .88rem; font-weight: 600; }
+
+  /* ── Related stocks ── */
+  .related-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: .5rem 0; border-bottom: 1px solid var(--border);
+  }
+  .related-item:last-child { border-bottom: none; }
+  .related-name { font-size: .82rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
+  .related-ticker { font-size: .72rem; color: var(--tab-fg); }
+  .related-price { font-size: .82rem; font-weight: 700; text-align: right; }
+  .related-chg { font-size: .72rem; font-weight: 600; }
+
+  .period-btn { font-size: .78rem; padding: .2rem .6rem; }
+  .period-btn.active { background: var(--accent); border-color: var(--accent); color:#fff; }
+
+  .order-tab-btn { flex: 1; }
+  .order-tab-btn.buy-active   { background: var(--up);   border-color: var(--up);   color: #fff; }
+  .order-tab-btn.sell-active  { background: var(--down); border-color: var(--down); color: #fff; }
+  .order-tab-btn.short-active { background: #fd7e14;     border-color: #fd7e14;     color: #fff; }
+
+  .table { --bs-table-bg: transparent; --bs-table-striped-bg: var(--tbl-stripe); }
+  .table th { font-size: .78rem; font-weight: 600; color: var(--tbl-th); border-color: var(--border); white-space: nowrap; }
+  .table td { border-color: var(--tbl-stripe); vertical-align: middle; }
+
+  #toast-wrap { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 9999; min-width: 280px; }
+  .toast-msg { border-radius: 10px; font-size: .85rem; padding: .7rem 1rem; margin-top: .5rem; animation: fadeIn .3s; }
+  .toast-msg.success { background: rgba(38,166,154,.95); color: #fff; }
+  .toast-msg.error   { background: rgba(239,83,80,.95);  color: #fff; }
+  @keyframes fadeIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; } }
+
+  .spinner-border { width: 1.2rem; height: 1.2rem; }
+  .empty-state { color: var(--empty-fg); padding: 2.5rem 0; text-align: center; }
+  .news-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: .75rem 1rem; margin-bottom: .6rem; transition: border-color .15s; }
+  .news-card:hover { border-color: var(--accent); }
+  .news-card a { color: var(--tab-active-fg); text-decoration: none; font-weight: 500; font-size: .88rem; line-height: 1.35; }
+  .news-card a:hover { text-decoration: underline; }
+  .news-meta { font-size: .74rem; color: var(--empty-fg); margin-top: .3rem; }
+  .news-skeleton { height: 72px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; margin-bottom: .6rem;
+    background-image: linear-gradient(90deg, var(--bg-card) 25%, var(--border) 50%, var(--bg-card) 75%);
+    background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+  .movers-skeleton { height: 220px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    background-image: linear-gradient(90deg, var(--bg-card) 25%, var(--border) 50%, var(--bg-card) 75%);
+    background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+  .movers-row-link { cursor: pointer; }
+  .movers-row-link:hover td { background: rgba(255,255,255,.04); }
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+  /* ── Input error highlight ── */
+  .input-error { border-color: var(--down) !important; }
+
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════
+     AUTH OVERLAY  (login / register)
+══════════════════════════════════════════════════ -->
+<div id="auth-overlay" class="full-overlay">
+  <div class="auth-card">
+    <div class="app-logo mb-1">📈 PaperTrade</div>
+    <p class="text-secondary mb-4" style="font-size:.85rem;" data-i18n="auth_subtitle"></p>
+
+    <!-- Tab buttons -->
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tab-login-btn"    onclick="switchAuthTab('login')"    data-i18n="login_tab"></button>
+      <button class="auth-tab"        id="tab-register-btn" onclick="switchAuthTab('register')" data-i18n="register_tab"></button>
+    </div>
+
+    <!-- Login form -->
+    <div id="auth-login-form">
+      <div class="mb-3">
+        <label class="form-label fw-semibold" data-i18n="username"></label>
+        <input id="login-user" type="text" class="form-control"
+               onkeydown="if(event.key==='Enter') document.getElementById('login-pass').focus()"/>
+      </div>
+      <div class="mb-4">
+        <label class="form-label fw-semibold" data-i18n="password"></label>
+        <input id="login-pass" type="password" class="form-control"
+               onkeydown="if(event.key==='Enter') doLogin()"/>
+      </div>
+      <button id="login-btn" class="btn btn-primary w-100 fw-bold py-2" onclick="doLogin()" data-i18n="login_btn"></button>
+      <p class="text-center text-secondary mt-3 mb-0" style="font-size:.8rem;" data-i18n="no_account"></p>
+    </div>
+
+    <!-- Register form -->
+    <div id="auth-register-form" style="display:none;">
+      <div class="mb-3">
+        <label class="form-label fw-semibold" data-i18n="username"></label>
+        <input id="reg-user" type="text" class="form-control"
+               onkeydown="if(event.key==='Enter') document.getElementById('reg-pass').focus()"/>
+        <div class="form-text" data-i18n="username_hint"></div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold" data-i18n="password"></label>
+        <input id="reg-pass" type="password" class="form-control"
+               onkeydown="if(event.key==='Enter') document.getElementById('reg-pass2').focus()"/>
+        <div class="form-text" data-i18n="password_hint"></div>
+      </div>
+      <div class="mb-4">
+        <label class="form-label fw-semibold" data-i18n="confirm_password"></label>
+        <input id="reg-pass2" type="password" class="form-control"
+               onkeydown="if(event.key==='Enter') doRegister()"/>
+      </div>
+      <button id="register-btn" class="btn btn-success w-100 fw-bold py-2" onclick="doRegister()" data-i18n="register_btn"></button>
+      <p class="text-center text-secondary mt-3 mb-0" style="font-size:.8rem;" data-i18n="have_account"></p>
+    </div>
+
+    <!-- Lang/theme strip at bottom -->
+    <div class="d-flex justify-content-center gap-2 mt-4">
+      <div class="toggle-pill">
+        <button onclick="setLang('ko')" id="auth-lang-ko">한국어</button>
+        <button onclick="setLang('en')" id="auth-lang-en">English</button>
+      </div>
+      <div class="toggle-pill">
+        <button onclick="setTheme('dark')"  id="auth-theme-dark"><i class="bi bi-moon-stars-fill"></i></button>
+        <button onclick="setTheme('light')" id="auth-theme-light"><i class="bi bi-sun-fill"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     SETUP OVERLAY  (initial balance)
+══════════════════════════════════════════════════ -->
+<div id="setup-overlay" class="full-overlay" style="display:none;">
+  <div class="setup-card">
+    <div class="app-logo mb-1">📈 PaperTrade</div>
+    <p class="text-secondary mb-4" data-i18n="setup_title"></p>
+    <div class="mb-3">
+      <label class="form-label fw-semibold" data-i18n="setup_krw_label"></label>
+      <div class="input-group">
+        <span class="input-group-text">₩</span>
+        <input id="setup-krw" type="text" class="form-control" value="10,000,000" inputmode="numeric" oninput="fmtNumInput(this)"/>
+      </div>
+      <div class="form-text" data-i18n="setup_krw_hint"></div>
+    </div>
+    <div class="mb-4">
+      <label class="form-label fw-semibold" data-i18n="setup_usd_label"></label>
+      <div class="input-group">
+        <span class="input-group-text">$</span>
+        <input id="setup-usd" type="text" class="form-control" value="10,000" inputmode="numeric" oninput="fmtNumInput(this)"/>
+      </div>
+      <div class="form-text" data-i18n="setup_usd_hint"></div>
+    </div>
+    <button id="setup-btn" class="btn btn-primary w-100 fw-bold py-2" onclick="doSetup()"></button>
+    <p class="text-secondary text-center mt-3 mb-0" style="font-size:.78rem;" data-i18n="setup_note"></p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     MAIN APP
+══════════════════════════════════════════════════ -->
+<div id="main-app" style="display:none;">
+
+  <!-- Header -->
+  <div id="header">
+    <div class="logo">📈 PaperTrade</div>
+    <div id="kr-badge" class="market-badge closed"><span class="dot closed"></span><span id="kr-badge-text"></span></div>
+    <div id="us-badge" class="market-badge closed"><span class="dot closed"></span><span id="us-badge-text"></span></div>
+    <div class="header-right">
+      <div class="balance-chip">₩ <span id="bal-krw">—</span></div>
+      <div class="balance-chip">$ <span id="bal-usd">—</span></div>
+      <div class="user-chip"><i class="bi bi-person-fill me-1"></i><span id="header-username"></span></div>
+      <div id="fee-tier-chip" class="balance-chip" style="cursor:default;" title=""></div>
+      <button class="btn btn-sm btn-outline-warning fw-semibold" onclick="openExchange()" style="font-size:.78rem;">
+        <i class="bi bi-currency-exchange"></i> <span data-i18n="exchange_btn"></span>
+      </button>
+      <div class="toggle-pill">
+        <button onclick="setLang('ko')" id="lang-ko">한국어</button>
+        <button onclick="setLang('en')" id="lang-en">English</button>
+      </div>
+      <div class="toggle-pill">
+        <button onclick="setTheme('dark')"  id="theme-dark"><i class="bi bi-moon-stars-fill"></i> <span data-i18n="dark_mode"></span></button>
+        <button onclick="setTheme('light')" id="theme-light"><i class="bi bi-sun-fill"></i> <span data-i18n="light_mode"></span></button>
+      </div>
+      <button class="btn btn-sm btn-outline-secondary" onclick="doLogout()">
+        <i class="bi bi-box-arrow-right"></i> <span data-i18n="logout"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Nav tabs -->
+  <ul class="nav nav-tabs" id="mainTabs">
+    <li class="nav-item"><a class="nav-link active" href="#" onclick="switchTab('market',this)">
+      <i class="bi bi-graph-up-arrow me-1"></i><span data-i18n="tab_market"></span>
+    </a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('portfolio',this)">
+      <i class="bi bi-pie-chart me-1"></i><span data-i18n="tab_portfolio"></span>
+    </a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('history',this)">
+      <i class="bi bi-clock-history me-1"></i><span data-i18n="tab_history"></span>
+    </a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('news',this)">
+      <i class="bi bi-newspaper me-1"></i><span data-i18n="tab_news"></span>
+    </a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('movers',this)">
+      <i class="bi bi-bar-chart-line me-1"></i><span data-i18n="tab_movers"></span>
+    </a></li>
+    <li class="nav-item"><a class="nav-link" href="#" onclick="switchTab('analytics',this)">
+      <i class="bi bi-graph-up me-1"></i><span data-i18n="tab_analytics"></span>
+    </a></li>
+  </ul>
+
+  <div class="container-fluid p-3" style="max-width:1400px;">
+
+    <!-- ── MARKET TAB ── -->
+    <div id="tab-market">
+      <!-- Search bar -->
+      <div class="card p-3 mb-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-auto">
+            <label class="form-label mb-1" style="font-size:.78rem;" data-i18n="market_label"></label>
+            <select id="search-market" class="form-select form-select-sm" style="width:115px;">
+              <option value="auto"   data-i18n="search_auto"></option>
+              <option value="KR"     data-i18n="search_kr"></option>
+              <option value="US"     data-i18n="search_us"></option>
+              <option value="CRYPTO" data-i18n="search_crypto"></option>
+            </select>
+          </div>
+          <div class="col">
+            <label class="form-label mb-1" style="font-size:.78rem;">
+              <span data-i18n="ticker_label"></span>
+              <span class="text-secondary ms-1" data-i18n="ticker_hint"></span>
+            </label>
+            <input id="search-input" type="text" class="form-control"
+                   onkeydown="if(event.key==='Enter') searchStock()"/>
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-primary" onclick="searchStock()">
+              <i class="bi bi-search"></i> <span data-i18n="search_btn"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <!-- Left: chart area -->
+        <div class="col-lg-8">
+          <div id="stock-detail" class="card p-3 mb-3" style="display:none;">
+
+            <!-- GF-style stock header -->
+            <div class="gf-stock-header">
+              <div class="d-flex align-items-center gap-2 mb-1">
+                <span id="si-market-badge" class="badge"></span>
+                <span id="si-status"></span>
+              </div>
+              <div id="si-name" class="gf-stock-name"></div>
+              <div id="si-symbol-ticker" class="gf-stock-ticker mb-2"></div>
+              <div id="si-price" class="gf-price-main"></div>
+              <div id="si-change" class="gf-price-change mt-1"></div>
+            </div>
+
+            <!-- Period tabs -->
+            <div class="gf-period-tabs mt-2">
+              <button class="gf-period-tab" onclick="setPeriod('1d',this)"  data-i18n="period_1d"></button>
+              <button class="gf-period-tab" onclick="setPeriod('5d',this)"  data-i18n="period_5d"></button>
+              <button class="gf-period-tab active" onclick="setPeriod('1mo',this)" data-i18n="period_1mo"></button>
+              <button class="gf-period-tab" onclick="setPeriod('6mo',this)" data-i18n="period_6mo"></button>
+              <button class="gf-period-tab" onclick="setPeriod('ytd',this)" data-i18n="period_ytd"></button>
+              <button class="gf-period-tab" onclick="setPeriod('1y',this)"  data-i18n="period_1y"></button>
+              <button class="gf-period-tab" onclick="setPeriod('5y',this)"  data-i18n="period_5y"></button>
+              <button class="gf-period-tab" onclick="setPeriod('max',this)" data-i18n="period_max"></button>
+            </div>
+
+            <!-- Chart tooltip (Google Finance style) -->
+            <div id="chart-tooltip" style="display:flex;align-items:baseline;gap:10px;padding:4px 0 8px 0;min-height:32px;">
+              <span id="tooltip-price" style="font-size:22px;font-weight:500;color:var(--text-primary,#ffffff);letter-spacing:-0.5px;"></span>
+              <span id="tooltip-date"  style="font-size:14px;color:var(--text-secondary,rgba(255,255,255,0.5));"></span>
+            </div>
+
+            <!-- Chart -->
+            <div id="chart-container" class="mt-1"></div>
+            <div id="chart-loading" class="text-center text-secondary py-3" style="display:none;">
+              <div class="spinner-border me-2"></div><span data-i18n="chart_loading"></span>
+            </div>
+
+            <!-- Stats grid -->
+            <div id="stock-stats" class="stats-grid mt-3" style="display:none;">
+              <div class="stat-item"><div class="stat-label" data-i18n="stat_open"></div><div id="stat-open" class="stat-val">—</div></div>
+              <div class="stat-item"><div class="stat-label" data-i18n="stat_high"></div><div id="stat-high" class="stat-val">—</div></div>
+              <div class="stat-item"><div class="stat-label" data-i18n="stat_low"></div><div id="stat-low" class="stat-val">—</div></div>
+              <div class="stat-item"><div class="stat-label" data-i18n="stat_mktcap"></div><div id="stat-mktcap" class="stat-val">—</div></div>
+              <div class="stat-item"><div class="stat-label" data-i18n="stat_per"></div><div id="stat-per" class="stat-val">—</div></div>
+              <div class="stat-item"><div class="stat-label" data-i18n="stat_52w"></div><div id="stat-52w" class="stat-val">—</div></div>
+            </div>
+          </div>
+
+          <!-- Placeholder when no stock selected -->
+          <div id="stock-placeholder" class="card p-5 text-center" style="color:var(--empty-fg);">
+            <i class="bi bi-graph-up fs-1 mb-3" style="opacity:.3;"></i>
+            <div data-i18n="search_prompt"></div>
+          </div>
+        </div>
+
+        <!-- Right: order form + related stocks -->
+        <div class="col-lg-4">
+          <div id="order-card" class="card p-3 mb-3" style="display:none;">
+            <div class="d-flex gap-2 mb-3">
+              <button id="btn-buy"   class="btn btn-sm order-tab-btn buy-active"           onclick="setOrderAction('buy')"   data-i18n="buy"></button>
+              <button id="btn-sell"  class="btn btn-sm btn-outline-secondary order-tab-btn" onclick="setOrderAction('sell')"  data-i18n="sell"></button>
+              <button id="btn-short" class="btn btn-sm btn-outline-secondary order-tab-btn" onclick="setOrderAction('short')" data-i18n="short_sell"></button>
+            </div>
+            <div class="mb-3">
+              <div class="btn-group btn-group-sm w-100">
+                <button id="type-market" class="btn btn-outline-secondary active w-50" onclick="setOrderType('market')" data-i18n="order_type_market"></button>
+                <button id="type-limit"  class="btn btn-outline-secondary w-50"       onclick="setOrderType('limit')"  data-i18n="order_type_limit"></button>
+              </div>
+            </div>
+            <div id="order-mode-group" class="mb-3">
+              <label class="form-label fw-semibold" style="font-size:.82rem;" data-i18n="order_mode"></label>
+              <div class="btn-group btn-group-sm w-100">
+                <button id="mode-qty" class="btn btn-outline-secondary active w-50" onclick="setOrderMode('qty')" data-i18n="order_qty"></button>
+                <button id="mode-amt" class="btn btn-outline-secondary w-50"        onclick="setOrderMode('amt')" data-i18n="order_amt"></button>
+              </div>
+            </div>
+            <div id="qty-group" class="mb-3">
+              <div class="d-flex justify-content-between align-items-end mb-1">
+                <label class="form-label mb-0" style="font-size:.82rem;" data-i18n="qty_label"></label>
+                <button id="sell-all-btn" class="btn p-0 fw-semibold" style="font-size:.75rem; color:#dc3545; line-height:1; display:none; background:none; border:none;" onclick="fillSellAll()" data-i18n="sell_all"></button>
+              </div>
+              <input id="order-qty" type="number" class="form-control" min="0.00000001" step="1" placeholder="0" oninput="updateShortCollateral(); updateLeverageInfo();"/>
+            </div>
+            <div id="amt-group" class="mb-3" style="display:none;">
+              <label class="form-label" style="font-size:.82rem;" data-i18n="amt_label"></label>
+              <div class="input-group">
+                <span id="amt-prefix" class="input-group-text">$</span>
+                <input id="order-amt" type="text" class="form-control" inputmode="numeric" placeholder="0" oninput="fmtNumInput(this)"/>
+              </div>
+            </div>
+            <div class="mb-3">
+              <div class="d-flex justify-content-between text-secondary" style="font-size:.8rem;">
+                <span data-i18n="current_price"></span><span id="order-price-label">—</span>
+              </div>
+              <div class="d-flex justify-content-between text-secondary mt-1" style="font-size:.8rem;">
+                <span data-i18n="available"></span><span id="order-balance-label">—</span>
+              </div>
+              <div id="holding-row" class="d-flex justify-content-between mt-1" style="font-size:.8rem; display:none !important;">
+                <span style="color:#8b949e;" data-i18n="holding_label"></span>
+                <span id="holding-qty-label" style="color:#e6edf3;">—</span>
+              </div>
+              <div id="short-collateral-row" class="d-flex justify-content-between mt-1" style="font-size:.8rem; color:#fd7e14; display:none !important;">
+                <span data-i18n="short_collateral_label"></span><span id="short-collateral-label">—</span>
+              </div>
+              <div id="short-liq-row" class="d-flex justify-content-between mt-1" style="font-size:.8rem; color:#dc3545; display:none;">
+                <span data-i18n="lev_liq_price_label"></span><span id="short-liq-label">—</span>
+              </div>
+              <div class="mt-1" style="font-size:.7rem; color:var(--empty-fg);">
+                <i class="bi bi-clock me-1"></i><span data-i18n="price_delay_notice"></span>
+              </div>
+            </div>
+            <!-- Short leverage selector -->
+            <div id="short-leverage-group" class="mb-3" style="display:none;">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <label class="form-label mb-0 fw-semibold" style="font-size:.82rem;" data-i18n="leverage_label"></label>
+                <div class="form-check form-switch mb-0">
+                  <input class="form-check-input" type="checkbox" id="short-leverage-toggle" onchange="toggleShortLeverage(this.checked)">
+                </div>
+              </div>
+              <div id="short-leverage-selector" style="display:none;">
+                <div id="short-lev-btns-krx" class="btn-group btn-group-sm w-100 mb-2" style="display:none;">
+                  <button class="btn btn-outline-secondary active" onclick="setShortLeverage(1.5)">1.5×</button>
+                  <button class="btn btn-outline-secondary" onclick="setShortLeverage(2)">2×</button>
+                  <button class="btn btn-outline-secondary" onclick="setShortLeverage(2.5)">2.5×</button>
+                </div>
+                <div id="short-lev-btns-us" class="btn-group btn-group-sm w-100 mb-2" style="display:none;">
+                  <button class="btn btn-outline-secondary active" onclick="setShortLeverage(2)">2×</button>
+                  <button class="btn btn-outline-secondary" onclick="setShortLeverage(4)">4×</button>
+                </div>
+                <div id="short-lev-btns-crypto" class="mb-2" style="display:none;">
+                  <div class="d-flex align-items-center gap-2 mb-1">
+                    <input id="short-lev-crypto-slider" type="range" class="form-range flex-fill"
+                      min="1" max="125" step="0.1" value="2"
+                      oninput="onShortCryptoLeverageInput(this.value)"/>
+                    <div class="input-group" style="width:90px;">
+                      <input id="short-lev-crypto-num" type="number" class="form-control form-control-sm"
+                        min="1.0" max="125.0" step="0.1" value="2"
+                        oninput="onShortCryptoLeverageInput(this.value)"/>
+                      <span class="input-group-text py-0 px-1" style="font-size:.8rem;">×</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Leverage toggle (buy only) -->
+            <div id="leverage-group" class="mb-3" style="display:none;">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <label class="form-label mb-0 fw-semibold" style="font-size:.82rem;" data-i18n="leverage_label"></label>
+                <div class="form-check form-switch mb-0">
+                  <input class="form-check-input" type="checkbox" id="leverage-toggle" onchange="toggleLeverage(this.checked)">
+                </div>
+              </div>
+              <div id="leverage-selector" style="display:none;">
+                <!-- KRX: 1.5× / 2× / 2.5× -->
+                <div id="lev-btns-krx" class="btn-group btn-group-sm w-100 mb-2" style="display:none;">
+                  <button class="btn btn-outline-secondary" onclick="setLeverage(1.5)">1.5×</button>
+                  <button class="btn btn-outline-secondary active" onclick="setLeverage(2)">2×</button>
+                  <button class="btn btn-outline-secondary" onclick="setLeverage(2.5)">2.5×</button>
+                </div>
+                <!-- US: 2× / 4× -->
+                <div id="lev-btns-us" class="btn-group btn-group-sm w-100 mb-2" style="display:none;">
+                  <button class="btn btn-outline-secondary active" onclick="setLeverage(2)">2×</button>
+                  <button class="btn btn-outline-secondary" onclick="setLeverage(4)">4×</button>
+                </div>
+                <!-- CRYPTO: slider + number -->
+                <div id="lev-btns-crypto" class="mb-2" style="display:none;">
+                  <div class="d-flex align-items-center gap-2 mb-1">
+                    <input id="lev-crypto-slider" type="range" class="form-range flex-fill"
+                      min="1" max="125" step="0.1" value="2"
+                      oninput="onCryptoLeverageInput(this.value)"/>
+                    <div class="input-group" style="width:90px;">
+                      <input id="lev-crypto-num" type="number" class="form-control form-control-sm"
+                        min="1.0" max="125.0" step="0.1" value="2"
+                        oninput="onCryptoLeverageInput(this.value)"/>
+                      <span class="input-group-text py-0 px-1" style="font-size:.8rem;">×</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div id="leverage-info" style="font-size:.78rem; display:none;">
+                <div class="d-flex justify-content-between" style="color:var(--empty-fg);">
+                  <span data-i18n="lev_margin_label"></span><span id="lev-margin-amt">—</span>
+                </div>
+                <div class="d-flex justify-content-between" style="color:#0dcaf0;">
+                  <span data-i18n="lev_borrowed_label"></span><span id="lev-borrowed-amt">—</span>
+                </div>
+                <div class="d-flex justify-content-between" style="color:#dc3545;">
+                  <span data-i18n="lev_liq_price_label"></span><span id="lev-liq-price">—</span>
+                </div>
+                <div class="d-flex justify-content-between" style="color:#dc3545;">
+                  <span data-i18n="lev_move_to_liq_label"></span><span id="lev-move-to-liq">—</span>
+                </div>
+                <div id="lev-risk-warning" class="alert alert-danger py-1 px-2 mt-1 mb-0"
+                     style="font-size:.73rem; display:none;"></div>
+              </div>
+            </div>
+
+            <div id="limit-price-group" class="mb-3" style="display:none;">
+              <label class="form-label" style="font-size:.82rem;" data-i18n="limit_price_label"></label>
+              <div class="input-group">
+                <span id="limit-price-prefix" class="input-group-text">$</span>
+                <input id="limit-price" type="number" class="form-control" min="0.00000001" step="any" placeholder="0"/>
+              </div>
+            </div>
+            <button id="order-btn" class="btn w-100 fw-bold" onclick="placeOrder()"></button>
+            <div id="market-closed-notice" class="alert alert-warning mt-3 py-2 text-center"
+                 style="display:none; font-size:.82rem;">
+              <i class="bi bi-clock"></i> <span data-i18n="market_closed_notice"></span>
+            </div>
+          </div>
+
+          <!-- Related stocks -->
+          <div id="related-card" class="card p-3" style="display:none;">
+            <div class="fw-semibold mb-2" style="font-size:.85rem;" data-i18n="related_title"></div>
+            <div id="related-loading" class="text-center text-secondary py-2" style="display:none;">
+              <div class="spinner-border spinner-border-sm me-1"></div>
+            </div>
+            <div id="related-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PORTFOLIO TAB ── -->
+    <div id="tab-portfolio" style="display:none;">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h6 class="mb-0 fw-bold" data-i18n="pf_holdings"></h6>
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-outline-success" onclick="openDepositModal()">
+            <i class="bi bi-plus-circle me-1"></i><span data-i18n="deposit_btn"></span>
+          </button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadPortfolio()">
+            <i class="bi bi-arrow-clockwise"></i> <span data-i18n="refresh"></span>
+          </button>
+        </div>
+      </div>
+      <div class="row g-3 mb-3">
+        <div class="col-sm-6 col-md-3">
+          <div class="card p-3 text-center">
+            <div class="text-secondary mb-1" style="font-size:.78rem;" data-i18n="krw_balance"></div>
+            <div class="fw-bold fs-5">₩<span id="pf-krw">—</span></div>
+          </div>
+        </div>
+        <div class="col-sm-6 col-md-3">
+          <div class="card p-3 text-center">
+            <div class="text-secondary mb-1" style="font-size:.78rem;" data-i18n="usd_balance"></div>
+            <div class="fw-bold fs-5">$<span id="pf-usd">—</span></div>
+          </div>
+        </div>
+        <div class="col-sm-6 col-md-3">
+          <div class="card p-3 text-center">
+            <div class="text-secondary mb-1" style="font-size:.78rem;" data-i18n="total_pl_krw"></div>
+            <div id="pf-pl-krw" class="fw-bold fs-5">—</div>
+          </div>
+        </div>
+        <div class="col-sm-6 col-md-3">
+          <div class="card p-3 text-center">
+            <div class="text-secondary mb-1" style="font-size:.78rem;" data-i18n="total_pl_usd"></div>
+            <div id="pf-pl-usd" class="fw-bold fs-5">—</div>
+          </div>
+        </div>
+      </div>
+      <!-- Dividend summary row -->
+      <div id="pf-div-row" class="row g-3 mb-3" style="display:none;">
+        <div class="col-sm-6">
+          <div class="card p-3 text-center" style="border-color:rgba(25,135,84,.4);">
+            <div class="text-secondary mb-1" style="font-size:.78rem;" data-i18n="div_total_krw"></div>
+            <div class="fw-bold fs-5" style="color:#198754;">₩<span id="pf-div-krw">0</span></div>
+          </div>
+        </div>
+        <div class="col-sm-6">
+          <div class="card p-3 text-center" style="border-color:rgba(25,135,84,.4);">
+            <div class="text-secondary mb-1" style="font-size:.78rem;" data-i18n="div_total_usd"></div>
+            <div class="fw-bold fs-5" style="color:#198754;">$<span id="pf-div-usd">0.00</span></div>
+          </div>
+        </div>
+      </div>
+      <!-- Fee tier info row -->
+      <div id="pf-tier-row" class="card p-3 mb-3" style="display:none;">
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+          <span id="pf-tier-badge" class="fw-bold" style="font-size:.9rem;"></span>
+          <span class="text-secondary" style="font-size:.82rem;">
+            <span data-i18n="tier_volume_label"></span>:
+            <strong id="pf-tier-vol">—</strong>
+          </span>
+          <span id="pf-tier-next-wrap" class="text-secondary" style="font-size:.82rem; display:none;">
+            · <span data-i18n="tier_to_next_label"></span>
+            <strong id="pf-tier-to-next">—</strong>
+            <span data-i18n="tier_to_next_suffix"></span>
+          </span>
+          <span id="pf-tier-max-wrap" class="text-secondary" style="font-size:.82rem; display:none;"
+            data-i18n="tier_max_label"></span>
+          <span class="ms-auto text-secondary" style="font-size:.78rem;">
+            <span data-i18n="tier_fee_label"></span>:
+            <span id="pf-tier-fees" class="fw-semibold text-warning">—</span>
+          </span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="table-responsive">
+          <table class="table table-striped mb-0">
+            <thead><tr>
+              <th data-i18n="col_symbol"></th><th data-i18n="col_name"></th><th data-i18n="col_market"></th>
+              <th class="text-end" data-i18n="col_qty"></th>
+              <th class="text-end" data-i18n="col_avg"></th>
+              <th class="text-end" data-i18n="col_price"></th>
+              <th class="text-end" data-i18n="col_value"></th>
+              <th class="text-end" data-i18n="col_pl"></th>
+              <th class="text-end" data-i18n="col_return"></th>
+              <th class="text-center" data-i18n="col_sltp"></th>
+            </tr></thead>
+            <tbody id="pf-tbody">
+              <tr><td colspan="10" class="empty-state"><span data-i18n="loading"></span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Open Orders -->
+      <div class="mt-4">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <h6 class="mb-0 fw-bold" data-i18n="open_orders_title"></h6>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadPendingOrders()">
+            <i class="bi bi-arrow-clockwise"></i> <span data-i18n="refresh"></span>
+          </button>
+        </div>
+        <div class="card">
+          <div class="table-responsive">
+            <table class="table table-striped mb-0">
+              <thead><tr>
+                <th data-i18n="col_date"></th>
+                <th data-i18n="col_symbol"></th>
+                <th data-i18n="col_market"></th>
+                <th data-i18n="col_type"></th>
+                <th class="text-end" data-i18n="col_qty"></th>
+                <th class="text-end" data-i18n="limit_price_label"></th>
+                <th></th>
+              </tr></thead>
+              <tbody id="orders-tbody">
+                <tr><td colspan="7" class="empty-state"><span data-i18n="loading"></span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <!-- Short Positions -->
+      <div class="mt-4">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <h6 class="mb-0 fw-bold" data-i18n="short_positions_title"></h6>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadShortPositions()">
+            <i class="bi bi-arrow-clockwise"></i> <span data-i18n="refresh"></span>
+          </button>
+        </div>
+        <div class="card">
+          <div class="table-responsive">
+            <table class="table table-striped mb-0">
+              <thead><tr>
+                <th data-i18n="col_symbol"></th>
+                <th data-i18n="col_market"></th>
+                <th class="text-center" data-i18n="lev_col_leverage"></th>
+                <th class="text-end" data-i18n="col_entry_price"></th>
+                <th class="text-end" data-i18n="col_price"></th>
+                <th class="text-end" data-i18n="col_qty"></th>
+                <th class="text-end" data-i18n="col_short_pl"></th>
+                <th class="text-end" data-i18n="lev_col_liq_price"></th>
+                <th class="text-end" data-i18n="col_borrow_fee"></th>
+                <th class="text-center"></th>
+              </tr></thead>
+              <tbody id="short-tbody">
+                <tr><td colspan="10" class="empty-state"><span data-i18n="loading"></span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      <!-- Leveraged Positions -->
+      <div class="mt-4">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <h6 class="mb-0 fw-bold" data-i18n="lev_positions_title"></h6>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadLeveragedPositions()">
+            <i class="bi bi-arrow-clockwise"></i> <span data-i18n="refresh"></span>
+          </button>
+        </div>
+        <div class="card">
+          <div class="table-responsive">
+            <table class="table table-striped mb-0">
+              <thead><tr>
+                <th data-i18n="col_symbol"></th>
+                <th data-i18n="col_market"></th>
+                <th class="text-center" data-i18n="lev_col_leverage"></th>
+                <th class="text-end" data-i18n="col_entry_price"></th>
+                <th class="text-end" data-i18n="col_price"></th>
+                <th class="text-end" data-i18n="lev_col_unreal_pnl"></th>
+                <th class="text-end" data-i18n="lev_col_liq_price"></th>
+                <th class="text-end" data-i18n="col_borrow_fee"></th>
+                <th class="text-center"></th>
+              </tr></thead>
+              <tbody id="lev-tbody">
+                <tr><td colspan="9" class="empty-state"><span data-i18n="loading"></span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      </div>
+    </div>
+
+    <!-- ── HISTORY TAB ── -->
+    <div id="tab-history" style="display:none;">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h6 class="mb-0 fw-bold" data-i18n="hist_title"></h6>
+        <button class="btn btn-sm btn-outline-secondary" onclick="loadHistory()">
+          <i class="bi bi-arrow-clockwise"></i> <span data-i18n="refresh"></span>
+        </button>
+      </div>
+      <div class="card">
+        <div class="table-responsive">
+          <table class="table table-striped mb-0">
+            <thead><tr>
+              <th data-i18n="col_date"></th><th data-i18n="col_symbol"></th><th data-i18n="col_market"></th>
+              <th data-i18n="col_type"></th>
+              <th class="text-end" data-i18n="col_qty"></th>
+              <th class="text-end" data-i18n="col_exec_price"></th>
+              <th class="text-end" data-i18n="col_amount"></th>
+              <th class="text-end" data-i18n="col_slippage"></th>
+              <th class="text-end" data-i18n="col_fee"></th>
+              <th class="text-end" data-i18n="col_tax"></th>
+              <th data-i18n="col_currency"></th>
+            </tr></thead>
+            <tbody id="hist-tbody">
+              <tr><td colspan="10" class="empty-state"><span data-i18n="loading"></span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── NEWS TAB ── -->
+    <div id="tab-news" style="display:none;">
+
+      <div class="row g-3">
+        <!-- Left 60%: general economic news -->
+        <div class="col-12 col-lg-7">
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-globe2 me-2 text-info"></i><span data-i18n="news_general_title"></span></h6>
+            <button class="btn btn-sm btn-outline-secondary" onclick="loadGeneralNews(true)">
+              <i class="bi bi-arrow-clockwise"></i> <span data-i18n="refresh"></span>
+            </button>
+          </div>
+          <div id="news-general-list">
+            <div class="news-skeleton"></div><div class="news-skeleton"></div><div class="news-skeleton"></div>
+          </div>
+        </div>
+        <!-- Right 40%: holdings news -->
+        <div class="col-12 col-lg-5">
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-briefcase me-2 text-warning"></i><span data-i18n="news_holdings_title"></span></h6>
+            <button class="btn btn-sm btn-outline-secondary" onclick="loadHoldingsNews(true)">
+              <i class="bi bi-arrow-clockwise"></i> <span data-i18n="refresh"></span>
+            </button>
+          </div>
+          <div id="news-holdings-list">
+            <div class="news-skeleton"></div><div class="news-skeleton"></div><div class="news-skeleton"></div>
+          </div>
+        </div>
+      </div><!-- /row news -->
+    </div><!-- /tab-news -->
+
+    <!-- ── MOVERS TAB ── -->
+    <div id="tab-movers" style="display:none;">
+      <div class="card p-3">
+        <!-- Controls -->
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+          <!-- Market -->
+          <div class="btn-group btn-group-sm" id="movers-market-group">
+            <button class="btn btn-outline-primary active" onclick="setMoversMarket('KRX',this)" data-i18n="movers_krx"></button>
+            <button class="btn btn-outline-danger"         onclick="setMoversMarket('US',this)"  data-i18n="movers_us"></button>
+          </div>
+          <!-- Direction -->
+          <div class="btn-group btn-group-sm" id="movers-dir-group">
+            <button class="btn btn-outline-danger active"  onclick="setMoversDir('up',this)"     data-i18n="movers_up"></button>
+            <button class="btn btn-outline-primary"        onclick="setMoversDir('down',this)"   data-i18n="movers_down"></button>
+            <button class="btn btn-outline-info"           onclick="setMoversDir('volume',this)" data-i18n="movers_dir_volume"></button>
+          </div>
+          <button class="btn btn-sm btn-outline-secondary" onclick="loadMovers(true)">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+        </div>
+
+        <div id="movers-table-wrap">
+          <div class="movers-skeleton"></div><div class="movers-skeleton"></div>
+          <div class="movers-skeleton"></div><div class="movers-skeleton"></div>
+          <div class="movers-skeleton"></div>
+        </div>
+        <div id="movers-footer" class="mt-2" style="font-size:.73rem; display:none;">
+          <span id="movers-updated" class="text-secondary"></span>
+        </div>
+      </div>
+    </div><!-- /tab-movers -->
+
+    <!-- ── ANALYTICS TAB ── -->
+    <div id="tab-analytics" style="display:none;">
+      <!-- Period filter -->
+      <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <span class="text-secondary" style="font-size:.82rem;" data-i18n="analytics_period"></span>
+        <div class="btn-group btn-group-sm" id="analytics-period-group">
+          <button class="btn btn-outline-secondary" onclick="setAnalyticsPeriod('1w',this)"  data-i18n="period_1w"></button>
+          <button class="btn btn-outline-secondary" onclick="setAnalyticsPeriod('1m',this)"  data-i18n="period_1m"></button>
+          <button class="btn btn-outline-secondary" onclick="setAnalyticsPeriod('3m',this)"  data-i18n="period_3m"></button>
+          <button class="btn btn-outline-secondary" onclick="setAnalyticsPeriod('6m',this)"  data-i18n="period_6m"></button>
+          <button class="btn btn-outline-secondary" onclick="setAnalyticsPeriod('1y',this)"  data-i18n="period_1y"></button>
+          <button class="btn btn-outline-secondary active" onclick="setAnalyticsPeriod('all',this)" data-i18n="period_all"></button>
+        </div>
+        <div class="btn-group btn-group-sm ms-2" id="analytics-currency-group">
+          <button class="btn btn-outline-warning active" onclick="setAnalyticsCurrency('KRW',this)">₩ KRW</button>
+          <button class="btn btn-outline-warning" onclick="setAnalyticsCurrency('USD',this)">$ USD</button>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="loadAnalytics()">
+          <i class="bi bi-arrow-clockwise"></i>
+        </button>
+      </div>
+      <!-- Summary cards -->
+      <div class="row g-3 mb-3" id="analytics-summary">
+        <div class="col-6 col-md-3">
+          <div class="card p-3 text-center">
+            <div class="text-secondary mb-1" style="font-size:.78rem;" data-i18n="analytics_profit"></div>
+            <div class="fw-bold fs-5" style="color:#198754;"><span id="an-profit-sym">₩</span><span id="an-profit">—</span></div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="card p-3 text-center">
+            <div class="text-secondary mb-1" style="font-size:.78rem;" data-i18n="analytics_loss"></div>
+            <div class="fw-bold fs-5" style="color:#dc3545;"><span id="an-loss-sym">₩</span><span id="an-loss">—</span></div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="card p-3 text-center">
+            <div class="text-secondary mb-1" style="font-size:.78rem;" data-i18n="analytics_net"></div>
+            <div class="fw-bold fs-5"><span id="an-net">—</span></div>
+          </div>
+        </div>
+        <div class="col-6 col-md-3">
+          <div class="card p-3 text-center">
+            <div class="text-secondary mb-1" style="font-size:.78rem;" data-i18n="analytics_winrate"></div>
+            <div class="fw-bold fs-5"><span id="an-winrate">—</span>%</div>
+          </div>
+        </div>
+      </div>
+      <!-- Winners / Losers tables -->
+      <div class="row g-3 mb-3">
+        <div class="col-md-6">
+          <div class="card p-3">
+            <h6 class="fw-bold mb-2" data-i18n="analytics_winners"></h6>
+            <div id="an-winners-wrap">
+              <table class="table table-sm table-dark mb-0">
+                <thead><tr>
+                  <th data-i18n="analytics_col_symbol"></th>
+                  <th data-i18n="analytics_col_cat"></th>
+                  <th class="text-end" data-i18n="analytics_col_pl"></th>
+                </tr></thead>
+                <tbody id="an-winners-body"><tr><td colspan="3" class="text-center text-secondary">—</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card p-3">
+            <h6 class="fw-bold mb-2" data-i18n="analytics_losers"></h6>
+            <div id="an-losers-wrap">
+              <table class="table table-sm table-dark mb-0">
+                <thead><tr>
+                  <th data-i18n="analytics_col_symbol"></th>
+                  <th data-i18n="analytics_col_cat"></th>
+                  <th class="text-end" data-i18n="analytics_col_pl"></th>
+                </tr></thead>
+                <tbody id="an-losers-body"><tr><td colspan="3" class="text-center text-secondary">—</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Category breakdown -->
+      <div class="card p-3">
+        <h6 class="fw-bold mb-2" data-i18n="analytics_by_cat"></h6>
+        <table class="table table-sm table-dark mb-0">
+          <thead><tr>
+            <th data-i18n="analytics_col_cat"></th>
+            <th class="text-end" data-i18n="analytics_col_trades"></th>
+            <th class="text-end" data-i18n="analytics_col_winrate"></th>
+            <th class="text-end" data-i18n="analytics_col_pl"></th>
+          </tr></thead>
+          <tbody id="an-cat-body"><tr><td colspan="4" class="text-center text-secondary">—</td></tr></tbody>
+        </table>
+      </div>
+    </div><!-- /tab-analytics -->
+
+  </div>
+  <!-- ══ DEPOSIT MODAL ══ -->
+  <div class="modal fade" id="depositModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:380px;">
+      <div class="modal-content" style="background:var(--bg-card); border:1px solid var(--border); border-radius:14px;">
+        <div class="modal-header border-0 pb-0">
+          <h6 class="modal-title fw-bold" data-i18n="deposit_title"></h6>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <!-- Currency selector -->
+          <div class="btn-group w-100 mb-3" id="deposit-currency-group">
+            <button class="btn btn-outline-primary active" onclick="setDepositCurrency('KRW',this)">KRW ₩</button>
+            <button class="btn btn-outline-info"           onclick="setDepositCurrency('USD',this)">USD $</button>
+          </div>
+          <!-- Amount input -->
+          <div class="mb-2">
+            <label class="form-label mb-1" style="font-size:.82rem;" data-i18n="deposit_amount"></label>
+            <input type="number" id="deposit-amount" class="form-control form-control-sm" min="0" placeholder="0">
+          </div>
+          <!-- Preset buttons KRW -->
+          <div id="deposit-presets-krw" class="d-flex gap-2 flex-wrap mb-1">
+            <button class="btn btn-sm btn-outline-secondary" onclick="addDepositAmount(1000000)">+₩100만</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="addDepositAmount(5000000)">+₩500만</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="addDepositAmount(10000000)">+₩1000만</button>
+          </div>
+          <div id="deposit-presets-usd" class="d-flex gap-2 flex-wrap mb-1" style="display:none!important;">
+            <button class="btn btn-sm btn-outline-secondary" onclick="addDepositAmount(1000)">+$1,000</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="addDepositAmount(5000)">+$5,000</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="addDepositAmount(10000)">+$10,000</button>
+          </div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button class="btn btn-success w-100" id="deposit-confirm-btn" onclick="confirmDeposit()">
+            <span data-i18n="deposit_confirm"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ ORDER CONFIRMATION MODAL ══ -->
+  <div class="modal fade" id="orderConfirmModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:400px;">
+      <div class="modal-content" style="background:var(--bg-card); border:1px solid var(--border); border-radius:14px;">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold" id="oc-title">—</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body pt-2">
+          <div class="rounded p-3 mb-3" style="background:var(--chip-bg);">
+            <!-- Market price row -->
+            <div class="d-flex justify-content-between mb-2" style="font-size:.85rem;">
+              <span class="text-secondary" data-i18n="order_market_price"></span>
+              <span id="oc-market-price" class="fw-semibold">—</span>
+            </div>
+            <!-- Slippage row (hidden when 0) -->
+            <div id="oc-slip-row" class="d-flex justify-content-between mb-2" style="font-size:.85rem; display:none;">
+              <span class="text-secondary" data-i18n="order_max_slippage"></span>
+              <span id="oc-slip" style="color:#0dcaf0;">—</span>
+            </div>
+            <!-- Subtotal row -->
+            <div class="d-flex justify-content-between mb-2" style="font-size:.85rem;">
+              <span class="text-secondary" id="oc-subtotal-label" data-i18n="order_subtotal"></span>
+              <span id="oc-subtotal" class="fw-semibold">—</span>
+            </div>
+            <!-- Fee row -->
+            <div class="d-flex justify-content-between mb-2" style="font-size:.85rem;">
+              <span class="text-secondary" id="oc-fee-label">—</span>
+              <span id="oc-fee" class="text-warning">—</span>
+            </div>
+            <!-- Tax row (KRX sell only) -->
+            <div id="oc-tax-row" class="d-flex justify-content-between mb-2" style="font-size:.85rem; display:none !important;">
+              <span class="text-secondary" id="oc-tax-label">—</span>
+              <span id="oc-tax" class="text-warning">—</span>
+            </div>
+            <!-- SEC fee row (US sell only) -->
+            <div id="oc-sec-row" class="d-flex justify-content-between mb-2" style="font-size:.85rem; display:none;">
+              <span class="text-secondary" data-i18n="order_sec_fee"></span>
+              <span id="oc-sec" class="text-warning">—</span>
+            </div>
+            <!-- Total separator + final line -->
+            <div class="d-flex justify-content-between align-items-center pt-2" style="border-top:1px solid var(--border);">
+              <span class="fw-bold" style="font-size:.9rem;" id="oc-total-label">—</span>
+              <span id="oc-total" class="fw-bold" style="font-size:1.1rem;">—</span>
+            </div>
+          </div>
+          <!-- Leverage extra rows (hidden unless leverage order) -->
+          <div id="oc-lev-section" style="display:none;">
+            <div class="rounded p-2 mt-2 mb-2" style="background:rgba(13,202,240,.07); font-size:.82rem;">
+              <div class="d-flex justify-content-between mb-1">
+                <span class="text-secondary" data-i18n="lev_margin_label"></span>
+                <span id="oc-lev-margin" class="fw-semibold">—</span>
+              </div>
+              <div class="d-flex justify-content-between mb-1">
+                <span class="text-secondary" data-i18n="lev_borrowed_label"></span>
+                <span id="oc-lev-borrowed" style="color:#0dcaf0;">—</span>
+              </div>
+              <div class="d-flex justify-content-between mb-1">
+                <span class="fw-semibold text-danger" data-i18n="lev_liq_price_label"></span>
+                <span id="oc-lev-liq" class="fw-semibold text-danger">—</span>
+              </div>
+              <div class="d-flex justify-content-between mb-1">
+                <span class="text-secondary" data-i18n="lev_move_to_liq_label"></span>
+                <span id="oc-lev-move" class="text-danger">—</span>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span class="text-secondary" data-i18n="lev_daily_interest_label"></span>
+                <span id="oc-lev-interest" class="text-warning">—</span>
+              </div>
+            </div>
+            <!-- Acknowledgement checkbox — shown only for leverage >= 10× -->
+            <div id="oc-lev-ack" class="form-check mb-2" style="display:none;">
+              <input class="form-check-input" type="checkbox" id="oc-lev-ack-chk"
+                onchange="document.getElementById('oc-confirm-btn').disabled = !this.checked;">
+              <label class="form-check-label text-warning" style="font-size:.78rem;"
+                data-i18n="lev_confirm_ack" for="oc-lev-ack-chk"></label>
+            </div>
+          </div>
+          <!-- Slippage disclaimer -->
+          <div id="oc-slip-note" class="text-secondary mb-3" style="font-size:.75rem; display:none;">
+            <i class="bi bi-info-circle me-1"></i><span data-i18n="slippage_note"></span>
+          </div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary w-50" data-bs-dismiss="modal" data-i18n="cancel"></button>
+            <button id="oc-confirm-btn" class="btn w-50 fw-bold" onclick="confirmOrder()"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ SHORT CONFIRM MODAL ══ -->
+  <div class="modal fade" id="shortConfirmModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:400px;">
+      <div class="modal-content" style="background:var(--bg-card); border:1px solid var(--border); border-radius:14px;">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold" style="color:#fd7e14;">
+            <i class="bi bi-arrow-down-square me-2"></i><span data-i18n="short_confirm_title"></span>
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body pt-2">
+          <div class="rounded p-3 mb-3" style="background:var(--chip-bg);">
+            <div class="d-flex justify-content-between mb-2" style="font-size:.85rem;">
+              <span class="text-secondary" data-i18n="order_market_price"></span>
+              <span id="sc-entry-price" class="fw-semibold">—</span>
+            </div>
+            <div class="d-flex justify-content-between mb-2" style="font-size:.85rem;">
+              <span class="text-secondary" data-i18n="col_qty"></span>
+              <span id="sc-qty" class="fw-semibold">—</span>
+            </div>
+            <div class="d-flex justify-content-between mb-2" style="font-size:.85rem;">
+              <span class="text-secondary" data-i18n="order_fee"></span>
+              <span id="sc-fee" class="text-warning">—</span>
+            </div>
+            <div id="sc-leverage-row" class="d-flex justify-content-between mb-2" style="font-size:.85rem; display:none!important;">
+              <span class="text-secondary" data-i18n="leverage_label"></span>
+              <span id="sc-leverage" class="fw-semibold" style="color:#fd7e14;">—</span>
+            </div>
+            <div id="sc-liq-row" class="d-flex justify-content-between mb-2" style="font-size:.85rem; display:none!important;">
+              <span class="text-secondary" data-i18n="lev_liq_price_label"></span>
+              <span id="sc-liq-price" class="fw-semibold" style="color:#dc3545;">—</span>
+            </div>
+            <div class="d-flex justify-content-between pt-2" style="font-size:.9rem; border-top:1px solid var(--border);">
+              <span class="fw-bold" data-i18n="short_collateral_required"></span>
+              <span id="sc-collateral" class="fw-bold" style="color:#fd7e14;">—</span>
+            </div>
+          </div>
+          <div class="alert alert-warning py-2 mb-3" style="font-size:.78rem;">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            <span data-i18n="short_risk_notice"></span>
+          </div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary w-50" data-bs-dismiss="modal" data-i18n="cancel"></button>
+            <button id="sc-confirm-btn" class="btn btn-warning w-50 fw-bold" onclick="confirmShortOrder()" data-i18n="short_confirm_btn"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ OCO MODAL ══ -->
+  <div class="modal fade" id="slTpModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:400px;">
+      <div class="modal-content" style="background:var(--bg-card); border:1px solid var(--border); border-radius:14px;">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold">
+            <i class="bi bi-arrows-collapse me-2" style="color:#ffc107;"></i>
+            <span data-i18n="sltp_title"></span> — <span id="sltp-symbol">—</span>
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <!-- Info bar -->
+          <div class="rounded p-2 mb-3" style="background:var(--chip-bg); font-size:.82rem;">
+            <span class="text-secondary" data-i18n="current_price"></span>:
+            <strong id="sltp-current-price">—</strong>
+            &nbsp;·&nbsp;
+            <span class="text-secondary" data-i18n="sltp_held_label"></span>:
+            <strong id="sltp-held">—</strong>
+          </div>
+          <!-- Quantity -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold" style="font-size:.82rem;" data-i18n="sltp_qty_label"></label>
+            <input id="sltp-qty" type="number" class="form-control" min="0.00000001" step="any" placeholder="0"/>
+          </div>
+          <!-- SL and TP side by side -->
+          <div class="d-flex gap-2 mb-3">
+            <!-- Stop-loss -->
+            <div class="flex-fill">
+              <label class="form-label d-flex align-items-center gap-1 mb-1" style="font-size:.82rem;">
+                <span class="badge bg-danger">SL</span>
+                <span data-i18n="sl_price_label"></span>
+              </label>
+              <div class="input-group">
+                <span class="input-group-text sltp-cur-prefix">$</span>
+                <input id="sl-price" type="number" class="form-control" min="0.00000001" step="any" placeholder="—"/>
+              </div>
+              <div class="text-secondary mt-1" style="font-size:.72rem;" data-i18n="sl_hint"></div>
+            </div>
+            <!-- Take-profit -->
+            <div class="flex-fill">
+              <label class="form-label d-flex align-items-center gap-1 mb-1" style="font-size:.82rem;">
+                <span class="badge bg-success">TP</span>
+                <span data-i18n="tp_price_label"></span>
+              </label>
+              <div class="input-group">
+                <span class="input-group-text sltp-cur-prefix">$</span>
+                <input id="tp-price" type="number" class="form-control" min="0.00000001" step="any" placeholder="—"/>
+              </div>
+              <div class="text-secondary mt-1" style="font-size:.72rem;" data-i18n="tp_hint"></div>
+            </div>
+          </div>
+          <div class="text-secondary mb-3" style="font-size:.75rem;">
+            <i class="bi bi-info-circle me-1"></i>
+            <span id="oco-notice-ko" style="display:none;">두 주문 중 하나가 체결되면 나머지는 자동으로 취소됩니다.</span>
+            <span id="oco-notice-en" style="display:none;">When one leg fills, the other is automatically cancelled.</span>
+          </div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary w-50" data-bs-dismiss="modal" data-i18n="cancel"></button>
+            <button class="btn btn-warning w-50 fw-bold" onclick="submitSlTp()" data-i18n="sltp_set_btn"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ EXCHANGE MODAL ══ -->
+  <div class="modal fade" id="exchangeModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:420px;">
+      <div class="modal-content" style="background:var(--bg-card); border:1px solid var(--border); border-radius:14px;">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold">
+            <i class="bi bi-currency-exchange me-2 text-warning"></i><span data-i18n="exchange_title"></span>
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+
+          <!-- Rate display -->
+          <div class="text-center py-2 px-3 rounded mb-3" style="background:var(--chip-bg);">
+            <div class="text-secondary mb-1" style="font-size:.75rem;" data-i18n="exchange_rate_label"></div>
+            <div id="fx-rate-display" class="fw-bold" style="font-size:1.1rem;">—</div>
+          </div>
+
+          <!-- Direction toggle -->
+          <div class="btn-group w-100 mb-3" id="fx-dir-group">
+            <button id="fx-btn-krw-usd" class="btn btn-outline-warning w-50 fw-semibold" onclick="setFxDir('KRW_TO_USD')">
+              ₩ KRW → USD $
+            </button>
+            <button id="fx-btn-usd-krw" class="btn btn-outline-warning w-50 fw-semibold" onclick="setFxDir('USD_TO_KRW')">
+              $ USD → KRW ₩
+            </button>
+          </div>
+
+          <!-- From amount -->
+          <div class="mb-1">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <label class="form-label mb-0" style="font-size:.82rem;" id="fx-from-label"></label>
+              <span class="text-secondary" style="font-size:.75rem;" id="fx-from-bal"></span>
+            </div>
+            <div class="input-group">
+              <span class="input-group-text" id="fx-from-prefix">₩</span>
+              <input id="fx-from-input" type="text" class="form-control" inputmode="numeric"
+                     placeholder="0" oninput="fmtNumInput(this); updateFxPreview()"/>
+              <button class="btn btn-outline-secondary" style="font-size:.75rem;" onclick="setFxMax()" data-i18n="fx_all"></button>
+            </div>
+          </div>
+
+          <!-- Arrow -->
+          <div class="text-center my-2 text-secondary">
+            <i class="bi bi-arrow-down-circle-fill fs-4"></i>
+          </div>
+
+          <!-- Fee breakdown -->
+          <div id="fx-breakdown" class="rounded p-3 mb-3" style="background:var(--chip-bg); display:none;">
+            <div class="d-flex justify-content-between mb-2" style="font-size:.8rem;">
+              <span class="text-secondary" data-i18n="fx_mid_rate_label"></span>
+              <span id="fx-mid-display" class="text-secondary">—</span>
+            </div>
+            <div class="d-flex justify-content-between mb-2" style="font-size:.8rem;">
+              <span class="text-secondary" data-i18n="fx_fee_label"></span>
+              <span class="text-warning" id="fx-fee-pct">—</span>
+            </div>
+            <div class="d-flex justify-content-between mb-2" style="font-size:.8rem;">
+              <span class="text-secondary" data-i18n="fx_applied_rate_label"></span>
+              <span id="fx-applied-display">—</span>
+            </div>
+            <div class="d-flex justify-content-between align-items-center pt-2" style="border-top:1px solid var(--border);">
+              <span class="fw-semibold" style="font-size:.85rem;" id="fx-to-label"></span>
+              <span id="fx-to-preview" class="fw-bold text-success" style="font-size:1rem;">—</span>
+            </div>
+          </div>
+
+          <button id="fx-submit-btn" class="btn btn-warning w-100 fw-bold py-2" onclick="doExchange()" data-i18n="exchange_confirm"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main-app -->
+
+<div id="toast-wrap"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ══════════════════════════════════════════════
+// Translations
+// ══════════════════════════════════════════════
+const LANG = {
+  ko: {
+    auth_subtitle:   '계정으로 로그인하거나 새 계정을 만드세요.',
+    login_tab:       '로그인',
+    register_tab:    '회원가입',
+    username:        '아이디',
+    password:        '비밀번호',
+    confirm_password:'비밀번호 확인',
+    username_hint:   '2~20자, 영문·숫자·밑줄(_) 가능',
+    password_hint:   '4자 이상',
+    login_btn:       '로그인',
+    register_btn:    '회원가입',
+    no_account:      '계정이 없으신가요? 회원가입 탭을 눌러주세요.',
+    have_account:    '이미 계정이 있으신가요? 로그인 탭을 눌러주세요.',
+    logout:          '로그아웃',
+    setup_title:     '처음 오셨군요! 시뮬레이션 시작 잔고를 설정하세요.',
+    setup_krw_label: '원화 (KRW) 초기 잔고',
+    setup_krw_hint:  '한국 주식 거래에 사용됩니다.',
+    setup_usd_label: '달러 (USD) 초기 잔고',
+    setup_usd_hint:  '미국 주식 거래에 사용됩니다.',
+    setup_btn:       '시뮬레이션 시작',
+    setup_saving:    '저장 중…',
+    setup_note:      '설정 완료 후 다시 변경할 수 없습니다.',
+    tab_market:      '시장',
+    tab_portfolio:   '포트폴리오',
+    tab_history:     '거래내역',
+    tab_news:        '뉴스',
+    tab_movers:      '급등/급락',
+    tab_analytics:   '수익분석',
+    deposit_btn:     '입금',
+    deposit_title:   '가상 자금 입금',
+    deposit_amount:  '금액',
+    deposit_confirm: '입금 확인',
+    analytics_period:  '기간',
+    period_1w:  '1주',
+    period_1m:  '1달',
+    period_3m:  '3달',
+    period_6m:  '6달',
+    period_1y:  '1년',
+    period_all: '전체',
+    analytics_profit:  '총수익',
+    analytics_loss:    '총손실',
+    analytics_net:     '순손익',
+    analytics_winrate: '승률',
+    analytics_winners: '이득 거래 📈',
+    analytics_losers:  '손해 거래 📉',
+    analytics_by_cat:  '카테고리별',
+    analytics_col_symbol:  '종목',
+    analytics_col_cat:     '분류',
+    analytics_col_pl:      '손익',
+    analytics_col_trades:  '거래수',
+    analytics_col_winrate: '승률',
+    news_general_title:  '경제 뉴스',
+    news_holdings_title: '내 종목 관련 뉴스',
+    news_no_holdings:    '보유 종목이 없습니다.',
+    news_no_articles:    '뉴스를 불러올 수 없습니다.',
+    movers_title:        '급등/급락 Top 10',
+    movers_krx:          '국장 🇰🇷',
+    movers_us:           '미장 🇺🇸',
+    movers_up:           '급등 🔺',
+    movers_down:         '급락 🔻',
+    movers_dir_volume:   '최다거래 📊',
+    movers_col_rank:     '순위',
+    movers_col_name:     '종목명',
+    movers_col_price:    '종가',
+    movers_col_high:     '고가',
+    movers_col_low:      '저가',
+    movers_col_change:   '변동%',
+    movers_col_volume:   '거래량',
+    movers_col_time:     '날짜',
+    movers_updated:      '마지막 업데이트',
+    movers_stale:        '(이전 데이터)',
+    movers_empty:        '데이터를 불러올 수 없습니다.',
+    market_label:    '시장',
+    search_auto:     '자동',
+    search_kr:       'KR (한국)',
+    search_us:       'US (미국)',
+    ticker_label:    '종목코드 / 티커',
+    ticker_hint:     'KR: 6자리 숫자 (예: 005930) · US: 티커 (예: AAPL)',
+    search_placeholder:'종목 검색...',
+    search_btn:      '검색',
+    chart_title:     '가격 차트',
+    chart_loading:   '차트 로딩 중…',
+    buy:             '매수',
+    sell:            '매도',
+    order_mode:      '주문 방식',
+    order_qty:       '수량',
+    order_amt:       '금액',
+    qty_label:       '수량 (주)',
+    amt_label:       '금액',
+    current_price:   '현재가',
+    available:       '사용 가능',
+    holding_label:   '보유수량',
+    sell_all:        '전량매도',
+    order_btn_buy:   '매수 주문',
+    order_btn_sell:  '매도 주문',
+    order_btn_closed:'장 마감 중',
+    market_closed_notice:'장 마감 중 — 거래 불가',
+    search_prompt:   '종목을 검색하면<br>주문 폼이 나타납니다.',
+    pf_holdings:     '보유 종목',
+    refresh:         '새로고침',
+    krw_balance:     '원화 잔고',
+    usd_balance:     '달러 잔고',
+    total_pl_krw:    '총 평가손익 (KRW)',
+    total_pl_usd:    '총 평가손익 (USD)',
+    col_symbol:      '종목',   col_name: '이름',      col_market: '시장',
+    col_qty:         '보유수량', col_avg:  '평균단가',  col_price:  '현재가',
+    col_value:       '평가금액', col_pl:   '평가손익',  col_return: '수익률',
+    hist_title:      '거래 내역',
+    col_date:        '일시',    col_type: '구분',      col_exec_price:'체결가',
+    col_amount:      '거래금액', col_fee:'수수료', col_tax:'세금', col_currency:'통화',
+    loading:         '로딩 중…',
+    no_holdings:     '보유 종목이 없습니다.',
+    no_history:      '거래 내역이 없습니다.',
+    tradable:        '거래 가능',   mkt_closed: '장 마감',
+    kr_market:       'KR 장',      us_market:  'US 장',
+    err_qty:         '수량을 입력하세요.',
+    err_amt:         '금액을 입력하세요.',
+    chart_fail:      '차트 로드 실패: ',
+    kr_label:        '🇰🇷 한국',    us_label: '🇺🇸 미국',    crypto_label: '₿ 암호화폐',
+    search_crypto:   '암호화폐',
+    dark_mode:       '다크',        light_mode:'라이트',
+    action_buy:      '매수',        action_sell:'매도',
+    err_pw_match:    '비밀번호가 일치하지 않습니다.',
+    logging_in:      '로그인 중…',  registering:'가입 중…',
+    exchange_btn:    '환전',
+    exchange_title:  '환전',
+    exchange_rate_label: '실시간 환율',
+    fx_from_krw:     '보낼 금액 (KRW)',
+    fx_from_usd:     '보낼 금액 (USD)',
+    fx_to_usd:       '받을 금액 (USD)',
+    fx_to_krw:       '받을 금액 (KRW)',
+    fx_all:          '전액',
+    fx_mid_rate_label:    '기준 환율 (시장가)',
+    fx_fee_label:         '환전 수수료',
+    fx_applied_rate_label:'적용 환율',
+    exchange_confirm:'환전하기',
+    exchange_processing: '환전 중…',
+    exchange_prompt: '잔고가 부족합니다. 환전하시겠습니까?',
+    action_exchange: '환전',
+    period_1d: '1일', period_5d: '5일', period_1mo: '1개월', period_6mo: '6개월',
+    period_ytd: '연중', period_1y: '1년', period_5y: '5년', period_max: '전체',
+    stat_open: '시가', stat_high: '고가', stat_low: '저가',
+    stat_mktcap: '시가총액', stat_per: '주가수익률(PER)', stat_52w: '52주 범위',
+    related_title: '관련 종목',
+    price_delay_notice: '가격은 최대 15분 지연될 수 있습니다.',
+    order_subtotal:         '소계',
+    order_subtotal_est:     '예상 소계',
+    order_fee:              '거래 수수료',
+    order_tax:              '증권거래세',
+    order_total_deduct:     '총 결제 금액',
+    order_total_receive:    '총 수령 금액',
+    order_total_deduct_est: '예상 결제 금액 *',
+    order_total_receive_est:'예상 수령 금액 *',
+    order_market_price:     '시장가 (현재가)',
+    order_max_slippage:     '최대 슬리피지',
+    slippage_note:          '* 시장가 주문은 슬리피지로 인해 실제 체결가가 달라질 수 있습니다.',
+    col_slippage:           '슬리피지',
+    shares_unit:            '주',
+    cancel:                 '취소',
+    order_type_market:      '시장가',
+    order_type_limit:   '지정가',
+    limit_price_label:  '지정가',
+    order_btn_limit_buy:  '지정가 매수',
+    order_btn_limit_sell: '지정가 매도',
+    open_orders_title:  '미체결 주문',
+    no_open_orders:     '미체결 주문이 없습니다.',
+    cancel_order_btn:   '취소',
+    order_cancelled:    '주문이 취소되었습니다.',
+    order_filled_notify:'지정가 주문이 체결되었습니다!',
+    err_limit_price:    '지정가를 입력하세요.',
+    order_sec_fee:      'SEC 규제 수수료',
+    tier_bronze:        '브론즈',
+    tier_silver:        '실버',
+    tier_gold:          '골드',
+    tier_platinum:      '플래티넘',
+    tier_volume_label:  '이번 달 거래금액',
+    tier_to_next_label: '다음 등급까지',
+    tier_to_next_suffix:'남음',
+    tier_to_label:      '까지',
+    tier_max_label:     '최고 등급',
+    tier_fee_label:     '수수료율',
+    tier_traded_this_month: '이번 달 거래',
+    sltp_title:         'OCO 주문 설정',
+    sltp_held_label:    '보유수량',
+    sltp_qty_label:     '수량 (주)',
+    sl_price_label:     '손절가 (SL)',
+    tp_price_label:     '익절가 (TP)',
+    sltp_optional:      '',
+    sl_hint:            '현재가보다 낮게 설정하세요.',
+    tp_hint:            '현재가보다 높게 설정하세요.',
+    sltp_set_btn:       'OCO 주문 등록',
+    col_sltp:           'OCO',
+    sl_triggered:       '손절매 체결 (TP 자동취소): ',
+    tp_triggered:       '익절 체결 (SL 자동취소): ',
+    err_sltp_empty:     'SL 가격과 TP 가격을 모두 입력하세요.',
+    oco_set_ok:              'OCO 주문 등록 완료',
+    oco_sibling_cancelled:   '반대 주문 자동 취소됨',
+    short_sell:              '공매도',
+    short_positions_title:   '공매도 포지션',
+    no_short_positions:      '공매도 포지션이 없습니다.',
+    col_entry_price:         '진입가',
+    col_short_pl:            '평가손익',
+    col_borrow_fee:          '누적 차입료',
+    short_collateral_label:  '담보금 (150%)',
+    short_collateral_required:'필요 담보금 (150%)',
+    short_confirm_title:     '공매도 주문 확인',
+    short_confirm_btn:       '공매도 주문',
+    short_risk_notice:       '공매도는 가격 상승 시 손실이 무한할 수 있습니다. 담보금이 부족하면 강제 청산됩니다. (일일 차입료 0.03%)',
+    short_close_btn:         '청산',
+    margin_call_badge:       '마진콜',
+    order_btn_short:         '공매도 주문',
+    action_short_open:       '공매도 개시',
+    action_short_close:      '공매도 청산',
+    action_short_margin:     '강제청산',
+    leverage_label:          '레버리지',
+    lev_positions_title:     '레버리지 포지션',
+    no_lev_positions:        '레버리지 포지션이 없습니다.',
+    lev_col_leverage:        '배율',
+    lev_col_unreal_pnl:      '평가손익',
+    lev_col_liq_price:       '청산가',
+    lev_margin_label:        '증거금 (내 자본)',
+    lev_borrowed_label:      '차입금 (가상 대출)',
+    lev_liq_price_label:     '청산가',
+    lev_close_btn:           '청산',
+    lev_near_liq_badge:      '청산 위험',
+    lev_liquidated_badge:    '강제청산됨',
+    order_btn_lev_buy:       '레버리지 매수',
+    action_lev_open:         '레버리지 매수',
+    action_lev_close:        '레버리지 청산',
+    action_lev_liquidated:   '강제청산',
+    lev_move_to_liq_label:   '청산까지 가격 변동',
+    lev_daily_interest_label:'일일 이자 비용',
+    lev_confirm_ack:         '본 포지션은 강제청산될 수 있음을 이해합니다.',
+    lev_high_warn:           '{x}× 레버리지: 가격이 {pct}% 반대 방향으로 움직이면 청산됩니다.',
+    lev_extreme_warn_1:      '{x}× 레버리지: {pct}% 이동 시 청산. 극도로 위험합니다.',
+    lev_extreme_warn_2:      '100× 이상 레버리지는 일반적인 시장 변동성으로도 수분 내 청산될 수 있습니다.',
+    div_total_krw:           '총 배당금 수령 (KRW)',
+    div_total_usd:           '총 배당금 수령 (USD)',
+    action_dividend:         '배당금',
+  },
+  en: {
+    auth_subtitle:   'Sign in to your account or create a new one.',
+    login_tab:       'Login',
+    register_tab:    'Register',
+    username:        'Username',
+    password:        'Password',
+    confirm_password:'Confirm Password',
+    username_hint:   '2–20 chars, letters / numbers / underscore',
+    password_hint:   'At least 4 characters',
+    login_btn:       'Login',
+    register_btn:    'Create Account',
+    no_account:      "Don't have an account? Click the Register tab.",
+    have_account:    'Already have an account? Click the Login tab.',
+    logout:          'Logout',
+    setup_title:     'Welcome! Set your starting balance to begin the simulation.',
+    setup_krw_label: 'Korean Won (KRW) Balance',
+    setup_krw_hint:  'Used for trading Korean stocks.',
+    setup_usd_label: 'US Dollar (USD) Balance',
+    setup_usd_hint:  'Used for trading US stocks.',
+    setup_btn:       'Start Simulation',
+    setup_saving:    'Saving…',
+    setup_note:      'This cannot be changed after initial setup.',
+    tab_market:      'Market',
+    tab_portfolio:   'Portfolio',
+    tab_history:     'History',
+    tab_news:        'News',
+    tab_movers:      'Movers',
+    tab_analytics:   'Analytics',
+    deposit_btn:     'Deposit',
+    deposit_title:   'Add Virtual Funds',
+    deposit_amount:  'Amount',
+    deposit_confirm: 'Confirm Deposit',
+    analytics_period:  'Period',
+    period_1w:  '1W',
+    period_1m:  '1M',
+    period_3m:  '3M',
+    period_6m:  '6M',
+    period_1y:  '1Y',
+    period_all: 'All',
+    analytics_profit:  'Total Profit',
+    analytics_loss:    'Total Loss',
+    analytics_net:     'Net P&L',
+    analytics_winrate: 'Win Rate',
+    analytics_winners: 'Winners 📈',
+    analytics_losers:  'Losers 📉',
+    analytics_by_cat:  'By Category',
+    analytics_col_symbol:  'Symbol',
+    analytics_col_cat:     'Category',
+    analytics_col_pl:      'P&L',
+    analytics_col_trades:  'Trades',
+    analytics_col_winrate: 'Win Rate',
+    news_general_title:  'Economic News',
+    news_holdings_title: 'My Holdings News',
+    news_no_holdings:    'No holdings yet.',
+    news_no_articles:    'Could not load news.',
+    movers_title:        'Top Movers',
+    movers_krx:          'KRX 🇰🇷',
+    movers_us:           'US 🇺🇸',
+    movers_up:           'Top Gainers 🔺',
+    movers_down:         'Top Losers 🔻',
+    movers_dir_volume:   'Volume 📊',
+    movers_col_rank:     '#',
+    movers_col_name:     'Name',
+    movers_col_price:    'Close',
+    movers_col_high:     'High',
+    movers_col_low:      'Low',
+    movers_col_change:   'Change%',
+    movers_col_volume:   'Volume',
+    movers_col_time:     'Date',
+    movers_updated:      'Last updated',
+    movers_stale:        '(cached)',
+    movers_empty:        'Could not load data.',
+    market_label:    'Market',
+    search_auto:     'Auto',
+    search_kr:       'KR (Korea)',
+    search_us:       'US (America)',
+    ticker_label:    'Symbol / Ticker',
+    ticker_hint:     'KR: 6-digit code (e.g. 005930) · US: ticker (e.g. AAPL)',
+    search_placeholder:'Search stock...',
+    search_btn:      'Search',
+    chart_title:     'Price Chart',
+    chart_loading:   'Loading chart…',
+    buy:             'Buy',
+    sell:            'Sell',
+    order_mode:      'Order Type',
+    order_qty:       'Quantity',
+    order_amt:       'Amount',
+    qty_label:       'Quantity (shares)',
+    amt_label:       'Amount',
+    current_price:   'Current Price',
+    available:       'Available',
+    holding_label:   'Holdings',
+    sell_all:        'Sell All',
+    order_btn_buy:   'Place Buy Order',
+    order_btn_sell:  'Place Sell Order',
+    order_btn_closed:'Market Closed',
+    market_closed_notice:'Market Closed — Trading Unavailable',
+    search_prompt:   'Search for a stock<br>to show the order form.',
+    pf_holdings:     'Holdings',
+    refresh:         'Refresh',
+    krw_balance:     'KRW Balance',
+    usd_balance:     'USD Balance',
+    total_pl_krw:    'Total P&L (KRW)',
+    total_pl_usd:    'Total P&L (USD)',
+    col_symbol:      'Symbol',  col_name:  'Name',       col_market: 'Market',
+    col_qty:         'Shares',  col_avg:   'Avg Price',  col_price:  'Curr Price',
+    col_value:       'Value',   col_pl:    'P&L',        col_return: 'Return',
+    hist_title:      'Transaction History',
+    col_date:        'Date',    col_type:  'Type',       col_exec_price:'Exec Price',
+    col_amount:      'Amount',  col_fee:'Fee', col_tax:'Tax', col_currency:'Currency',
+    loading:         'Loading…',
+    no_holdings:     'No holdings yet.',
+    no_history:      'No transactions yet.',
+    tradable:        'Tradable',     mkt_closed: 'Market Closed',
+    kr_market:       'KR Market',   us_market:  'US Market',
+    err_qty:         'Please enter quantity.',
+    err_amt:         'Please enter amount.',
+    chart_fail:      'Chart load failed: ',
+    kr_label:        '🇰🇷 Korea',    us_label: '🇺🇸 USA',    crypto_label: '₿ Crypto',
+    search_crypto:   'Crypto',
+    dark_mode:       'Dark',         light_mode:'Light',
+    action_buy:      'Buy',          action_sell:'Sell',
+    err_pw_match:    'Passwords do not match.',
+    logging_in:      'Logging in…',  registering:'Creating account…',
+    exchange_btn:    'Exchange',
+    exchange_title:  'Currency Exchange',
+    exchange_rate_label: 'Live Rate',
+    fx_from_krw:     'Amount to send (KRW)',
+    fx_from_usd:     'Amount to send (USD)',
+    fx_to_usd:       'You will receive (USD)',
+    fx_to_krw:       'You will receive (KRW)',
+    fx_all:          'All',
+    fx_mid_rate_label:    'Mid-market rate',
+    fx_fee_label:         'Spread fee',
+    fx_applied_rate_label:'Rate you\'ll receive',
+    exchange_confirm:'Exchange Now',
+    exchange_processing: 'Processing…',
+    exchange_prompt: 'Insufficient balance. Would you like to exchange?',
+    action_exchange: 'Exchange',
+    period_1d: '1D', period_5d: '5D', period_1mo: '1M', period_6mo: '6M',
+    period_ytd: 'YTD', period_1y: '1Y', period_5y: '5Y', period_max: 'MAX',
+    stat_open: 'Open', stat_high: "Day's High", stat_low: "Day's Low",
+    stat_mktcap: 'Market Cap', stat_per: 'P/E Ratio', stat_52w: '52-Week Range',
+    related_title: 'Related Stocks',
+    price_delay_notice: 'Prices may be delayed up to 15 min.',
+    order_subtotal:         'Subtotal',
+    order_subtotal_est:     'Est. Subtotal',
+    order_fee:              'Broker Fee',
+    order_tax:              'Securities Tax',
+    order_total_deduct:     'Total Charged',
+    order_total_receive:    'Total Received',
+    order_total_deduct_est: 'Est. Total Charged *',
+    order_total_receive_est:'Est. Total Received *',
+    order_market_price:     'Market Price',
+    order_max_slippage:     'Max Slippage',
+    slippage_note:          '* Market orders may execute at a different price due to slippage.',
+    col_slippage:           'Slippage',
+    shares_unit:            ' sh',
+    cancel:                 'Cancel',
+    order_type_market:      'Market Order',
+    order_type_limit:   'Limit Order',
+    limit_price_label:  'Limit Price',
+    order_btn_limit_buy:  'Place Limit Buy',
+    order_btn_limit_sell: 'Place Limit Sell',
+    open_orders_title:  'Open Orders',
+    no_open_orders:     'No open orders.',
+    cancel_order_btn:   'Cancel',
+    order_cancelled:    'Order cancelled.',
+    order_filled_notify:'Limit order filled!',
+    err_limit_price:    'Please enter a limit price.',
+    order_sec_fee:      'SEC regulatory fee',
+    tier_bronze:        'Bronze',
+    tier_silver:        'Silver',
+    tier_gold:          'Gold',
+    tier_platinum:      'Platinum',
+    tier_volume_label:  'Monthly volume',
+    tier_to_next_label: 'Next tier in',
+    tier_to_next_suffix:'',
+    tier_to_label:      'to',
+    tier_max_label:     'Max tier reached',
+    tier_fee_label:     'Fee rate',
+    tier_traded_this_month: 'traded this month',
+    sltp_title:         'Set OCO Order',
+    sltp_held_label:    'Held',
+    sltp_qty_label:     'Quantity (shares)',
+    sl_price_label:     'Stop-Loss (SL)',
+    tp_price_label:     'Take-Profit (TP)',
+    sltp_optional:      '',
+    sl_hint:            'Must be below the current price.',
+    tp_hint:            'Must be above the current price.',
+    sltp_set_btn:       'Place OCO Order',
+    col_sltp:           'OCO',
+    sl_triggered:       'Stop-loss triggered (TP auto-cancelled): ',
+    tp_triggered:       'Take-profit hit (SL auto-cancelled): ',
+    err_sltp_empty:     'Both SL and TP prices are required for an OCO order.',
+    oco_set_ok:              'OCO order placed',
+    oco_sibling_cancelled:   'opposite order auto-cancelled',
+    short_sell:              'Short',
+    short_positions_title:   'Short Positions',
+    no_short_positions:      'No short positions.',
+    col_entry_price:         'Entry Price',
+    col_short_pl:            'Unreal. P&L',
+    col_borrow_fee:          'Borrow Fee',
+    short_collateral_label:  'Collateral (150%)',
+    short_collateral_required:'Required Collateral (150%)',
+    short_confirm_title:     'Confirm Short Sale',
+    short_confirm_btn:       'Open Short',
+    short_risk_notice:       'Short selling carries unlimited loss potential if price rises. Position will be force-closed if unrealized loss exceeds 50% of collateral. (Daily borrow fee: 0.03%)',
+    short_close_btn:         'Close',
+    margin_call_badge:       'Margin Call',
+    order_btn_short:         'Short Sell',
+    action_short_open:       'Short Open',
+    action_short_close:      'Short Close',
+    action_short_margin:     'Force Close',
+    leverage_label:          'Leverage',
+    lev_positions_title:     'Leveraged Positions',
+    no_lev_positions:        'No leveraged positions.',
+    lev_col_leverage:        'Leverage',
+    lev_col_unreal_pnl:      'Unreal. P&L',
+    lev_col_liq_price:       'Liq. Price',
+    lev_margin_label:        'Margin (your capital)',
+    lev_borrowed_label:      'Borrowed (virtual)',
+    lev_liq_price_label:     'Liquidation Price',
+    lev_close_btn:           'Close',
+    lev_near_liq_badge:      'Liq. Risk',
+    lev_liquidated_badge:    'Liquidated',
+    order_btn_lev_buy:       'Buy with Leverage',
+    action_lev_open:         'Lev. Buy',
+    action_lev_close:        'Lev. Close',
+    action_lev_liquidated:   'Liquidated',
+    lev_move_to_liq_label:   'Move to Liquidation',
+    lev_daily_interest_label:'Daily Interest',
+    lev_confirm_ack:         'I understand this position can be liquidated.',
+    lev_high_warn:           'At {x}×: price moves {pct}% against you triggers liquidation.',
+    lev_extreme_warn_1:      'At {x}×: only a {pct}% move triggers liquidation. Extreme risk.',
+    lev_extreme_warn_2:      'At 100×+, most positions are liquidated within minutes due to normal volatility.',
+    div_total_krw:           'Total Dividends (KRW)',
+    div_total_usd:           'Total Dividends (USD)',
+    action_dividend:         'Dividend',
+  }
+};
+
+// ══════════════════════════════════════════════
+// State
+// ══════════════════════════════════════════════
+let lang           = localStorage.getItem('pt_lang')  || 'ko';
+let theme          = localStorage.getItem('pt_theme') || 'dark';
+let authToken      = localStorage.getItem('pt_token') || null;
+let currentUser    = null;
+let currentSymbol  = null;
+let currentMarket  = null;
+let currentPrice   = null;
+let _holdingsMap   = {};
+let currentCurrency= null;
+let currentPeriod  = '1mo';
+let orderAction    = 'buy';
+let orderMode      = 'qty';
+let orderType      = 'market';
+let _knownPendingMap    = new Map();
+let _pendingInitialized = false;
+let _sltpState          = {};
+let currentFeeTier      = null;
+let currentFeeRates     = { KR: 0.00015, US: 0.0025, CRYPTO: 0.001 };
+let chart              = null;
+let activeSeries       = null;
+let _crosshairHandler  = null;
+let marketStatus   = { kr_open: false, us_open: false };
+let balances       = { KRW: 0, USD: 0 };
+let leverageEnabled = false;
+let currentLeverage = 2;
+
+function t(key) { return (LANG[lang] || LANG.ko)[key] || key; }
+
+// ══════════════════════════════════════════════
+// Language
+// ══════════════════════════════════════════════
+function setLang(l) {
+  lang = l;
+  localStorage.setItem('pt_lang', l);
+  document.documentElement.lang = l;
+  ['lang-ko','lang-en','auth-lang-ko','auth-lang-en'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('active', id.endsWith(l === 'ko' ? 'ko' : 'en'));
+  });
+  applyLang();
+}
+
+function applyLang() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.innerHTML = t(el.getAttribute('data-i18n'));
+  });
+  const sel = document.getElementById('search-market');
+  if (sel) { sel.options[0].text = t('search_auto'); sel.options[1].text = t('search_kr'); sel.options[2].text = t('search_us'); sel.options[3].text = t('search_crypto'); }
+  const si = document.getElementById('search-input');
+  if (si) si.placeholder = t('search_placeholder');
+  const setupBtn = document.getElementById('setup-btn');
+  if (setupBtn && !setupBtn.disabled) setupBtn.textContent = t('setup_btn');
+  refreshMarketBadgesText();
+  updateOrderButton();
+  if (currentMarket) {
+    const mb = document.getElementById('si-market-badge');
+    if (mb) mb.textContent = currentMarket === 'KR' ? t('kr_label') : currentMarket === 'CRYPTO' ? t('crypto_label') : t('us_label');
+    const ss = document.getElementById('si-status');
+    const isOpen = currentMarket === 'KR' ? marketStatus.kr_open : marketStatus.us_open;
+    if (ss) ss.innerHTML = isOpen
+      ? `<span class="badge bg-success">${t('tradable')}</span>`
+      : `<span class="badge bg-secondary">${t('mkt_closed')}</span>`;
+  }
+  // Update period tab labels
+  document.querySelectorAll('.gf-period-tab[data-i18n]').forEach(el => {
+    el.textContent = t(el.getAttribute('data-i18n'));
+  });
+}
+
+// ══════════════════════════════════════════════
+// Theme
+// ══════════════════════════════════════════════
+function setTheme(th) {
+  theme = th;
+  localStorage.setItem('pt_theme', th);
+  document.documentElement.setAttribute('data-bs-theme', th);
+  ['theme-dark','theme-light','auth-theme-dark','auth-theme-light'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('active',
+      (id.endsWith('dark') && th === 'dark') || (id.endsWith('light') && th === 'light')
+    );
+  });
+  updateChartTheme();
+}
+
+function updateChartTheme() {
+  if (!chart) return;
+  chart.applyOptions(_getChartOptions());
+}
+
+// ══════════════════════════════════════════════
+// Init
+// ══════════════════════════════════════════════
+async function init() {
+  setTheme(theme);
+  setLang(lang);
+
+  if (authToken) {
+    try {
+      currentUser = await api('/api/auth/me');
+      await afterLogin();
+    } catch {
+      clearAuth();
+      showScreen('auth');
+    }
+  } else {
+    showScreen('auth');
+  }
+}
+
+async function afterLogin() {
+  document.getElementById('header-username').textContent = currentUser.username;
+  const setup = await api('/api/setup');
+  if (setup.setup_complete) {
+    balances = setup.balances || {};
+    showScreen('app');
+    refreshMarketStatus();
+    refreshBalances();
+    checkPendingOrders();
+    checkDividends();
+    setInterval(refreshMarketStatus, 30000);
+    setInterval(() => { if (currentSymbol) fetchStockInfo(currentSymbol, currentMarket); }, 30000);
+    setInterval(checkPendingOrders, 30000);
+    setInterval(checkDividends, 60000);
+  } else {
+    showScreen('setup');
+  }
+}
+
+function showScreen(name) {
+  document.getElementById('auth-overlay').style.display  = name === 'auth'  ? 'flex' : 'none';
+  document.getElementById('setup-overlay').style.display = name === 'setup' ? 'flex' : 'none';
+  document.getElementById('main-app').style.display      = name === 'app'   ? 'block' : 'none';
+}
+
+function clearAuth() {
+  authToken   = null;
+  currentUser = null;
+  localStorage.removeItem('pt_token');
+}
+
+// ══════════════════════════════════════════════
+// Auth actions
+// ══════════════════════════════════════════════
+function switchAuthTab(tab) {
+  const isLogin = tab === 'login';
+  document.getElementById('tab-login-btn').classList.toggle('active', isLogin);
+  document.getElementById('tab-register-btn').classList.toggle('active', !isLogin);
+  document.getElementById('auth-login-form').style.display    = isLogin ? '' : 'none';
+  document.getElementById('auth-register-form').style.display = isLogin ? 'none' : '';
+}
+
+async function doLogin() {
+  const username = document.getElementById('login-user').value.trim();
+  const password = document.getElementById('login-pass').value;
+  if (!username || !password) return;
+
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true; btn.textContent = t('logging_in');
+  try {
+    const res = await api('/api/auth/login', 'POST', { username, password });
+    authToken   = res.token;
+    currentUser = { username: res.username };
+    localStorage.setItem('pt_token', authToken);
+    document.getElementById('login-pass').value = '';
+    await afterLogin();
+  } catch (e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = t('login_btn');
+  }
+}
+
+async function doRegister() {
+  const username = document.getElementById('reg-user').value.trim();
+  const password = document.getElementById('reg-pass').value;
+  const confirm  = document.getElementById('reg-pass2').value;
+
+  if (!username || !password) return;
+  if (password !== confirm) { showToast(t('err_pw_match'), 'error'); return; }
+
+  const btn = document.getElementById('register-btn');
+  btn.disabled = true; btn.textContent = t('registering');
+  try {
+    const res = await api('/api/auth/register', 'POST', { username, password });
+    authToken   = res.token;
+    currentUser = { username: res.username };
+    localStorage.setItem('pt_token', authToken);
+    document.getElementById('reg-pass').value = '';
+    document.getElementById('reg-pass2').value = '';
+    await afterLogin();
+  } catch (e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = t('register_btn');
+  }
+}
+
+async function doLogout() {
+  try { await api('/api/auth/logout', 'POST'); } catch {}
+  clearAuth();
+  currentSymbol = null; currentMarket = null;
+  chart = null; activeSeries = null;
+  document.getElementById('stock-detail').style.display      = 'none';
+  document.getElementById('stock-placeholder').style.display = 'block';
+  document.getElementById('order-card').style.display        = 'none';
+  document.getElementById('related-card').style.display      = 'none';
+  document.getElementById('login-user').value = '';
+  document.getElementById('login-pass').value = '';
+  switchAuthTab('login');
+  showScreen('auth');
+}
+
+// ══════════════════════════════════════════════
+// Setup
+// ══════════════════════════════════════════════
+async function doSetup() {
+  const krw = parseNum('setup-krw');
+  const usd = parseNum('setup-usd');
+  const btn = document.getElementById('setup-btn');
+  btn.disabled = true; btn.textContent = t('setup_saving');
+  try {
+    await api('/api/setup', 'POST', { krw, usd });
+    balances = { KRW: krw, USD: usd };
+    showScreen('app');
+    refreshMarketStatus();
+    refreshBalances();
+    checkPendingOrders();
+    checkDividends();
+    setInterval(refreshMarketStatus, 30000);
+    setInterval(() => { if (currentSymbol) fetchStockInfo(currentSymbol, currentMarket); }, 30000);
+    setInterval(checkPendingOrders, 30000);
+    setInterval(checkDividends, 60000);
+  } catch (e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = t('setup_btn');
+  }
+}
+
+// ══════════════════════════════════════════════
+// API helper (with auth token)
+// ══════════════════════════════════════════════
+async function api(url, method = 'GET', body = null) {
+  const opts = { method, headers: {} };
+  if (authToken) opts.headers['Authorization'] = `Bearer ${authToken}`;
+  if (body) { opts.body = JSON.stringify(body); opts.headers['Content-Type'] = 'application/json'; }
+  const res  = await fetch(url, opts);
+  const data = await res.json();
+  if (res.status === 401) {
+    clearAuth();
+    showScreen('auth');
+    throw new Error(data.detail || 'Unauthorized');
+  }
+  if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+  return data;
+}
+
+// ══════════════════════════════════════════════
+// Market status
+// ══════════════════════════════════════════════
+async function refreshMarketStatus() {
+  try {
+    marketStatus = await api('/api/market/status');
+    refreshMarketBadgesText();
+    updateOrderButton();
+  } catch {}
+}
+
+function refreshMarketBadgesText() {
+  _updateBadge('kr-badge', 'kr-badge-text', t('kr_market'), marketStatus.kr_open);
+  _updateBadge('us-badge', 'us-badge-text', t('us_market'), marketStatus.us_open);
+}
+
+function _updateBadge(badgeId, textId, label, isOpen) {
+  const badge = document.getElementById(badgeId);
+  const dot   = badge.querySelector('.dot');
+  const txt   = document.getElementById(textId);
+  if (!badge || !dot || !txt) return;
+  badge.className = `market-badge ${isOpen ? 'open' : 'closed'}`;
+  dot.className   = `dot ${isOpen ? 'open' : 'closed'}`;
+  txt.textContent = `${label} ${isOpen ? 'OPEN' : 'CLOSED'}`;
+}
+
+async function refreshBalances() {
+  try {
+    const res = await api('/api/portfolio');
+    balances = res.balances || {};
+    if (res.holdings) {
+      _holdingsMap = {};
+      res.holdings.forEach(h => { _holdingsMap[h.symbol] = h.quantity; });
+      updateHoldingDisplay();
+    }
+    document.getElementById('bal-krw').textContent = fmt(balances.KRW, 0);
+    document.getElementById('bal-usd').textContent = fmt(balances.USD, 2);
+    if (res.fee_tier) updateFeeTierDisplay(res.fee_tier);
+  } catch {}
+}
+
+const _TIER_META = {
+  Bronze:   { icon: '🥉', cls: 'text-secondary' },
+  Silver:   { icon: '🥈', cls: 'text-light'     },
+  Gold:     { icon: '🥇', cls: 'text-warning'   },
+  Platinum: { icon: '💎', cls: 'text-info'       },
+};
+
+function updateFeeTierDisplay(tier) {
+  currentFeeTier      = tier;
+  currentFeeRates.KR  = tier.kr_fee;
+  currentFeeRates.US  = tier.us_fee;
+
+  const meta     = _TIER_META[tier.name] || _TIER_META.Bronze;
+  const tierName = t('tier_' + tier.name.toLowerCase());
+
+  // Header chip
+  const chip = document.getElementById('fee-tier-chip');
+  if (chip) {
+    chip.innerHTML = `${meta.icon} <span class="${meta.cls} fw-semibold">${tierName}</span>`;
+    chip.title     = tier.to_next != null
+      ? `$${fmt(tier.monthly_volume, 0)} ${t('tier_traded_this_month')} · $${fmt(tier.to_next, 0)} ${t('tier_to_label')} ${t('tier_' + (tier.to_next > 0 ? _nextTierName(tier.name) : tier.name).toLowerCase())}`
+      : `$${fmt(tier.monthly_volume, 0)} ${t('tier_traded_this_month')} · ${t('tier_max_label')}`;
+  }
+
+  // Portfolio tab tier row
+  const row = document.getElementById('pf-tier-row');
+  if (!row) return;
+  row.style.display = '';
+
+  const badge = document.getElementById('pf-tier-badge');
+  badge.innerHTML   = `${meta.icon} <span class="${meta.cls}">${tierName}</span>`;
+
+  document.getElementById('pf-tier-vol').textContent = `$${fmt(tier.monthly_volume, 0)}`;
+
+  const nextWrap = document.getElementById('pf-tier-next-wrap');
+  const maxWrap  = document.getElementById('pf-tier-max-wrap');
+  if (tier.to_next != null) {
+    document.getElementById('pf-tier-to-next').textContent = `$${fmt(tier.to_next, 0)}`;
+    nextWrap.style.display = '';
+    maxWrap.style.display  = 'none';
+  } else {
+    nextWrap.style.display = 'none';
+    maxWrap.style.display  = '';
+  }
+
+  document.getElementById('pf-tier-fees').textContent =
+    `US ${(tier.us_fee * 100).toFixed(2)}% · KR ${(tier.kr_fee * 100).toFixed(3)}%`;
+}
+
+function _nextTierName(current) {
+  const idx = FEE_TIERS_JS.findIndex(t => t.name === current);
+  return idx >= 0 && idx + 1 < FEE_TIERS_JS.length ? FEE_TIERS_JS[idx + 1].name : current;
+}
+
+// ══════════════════════════════════════════════
+// Tab switching
+// ══════════════════════════════════════════════
+function switchTab(name, el) {
+  ['market','portfolio','history','news','movers','analytics'].forEach(n => {
+    document.getElementById(`tab-${n}`).style.display = 'none';
+  });
+  document.querySelectorAll('#mainTabs .nav-link').forEach(a => a.classList.remove('active'));
+  document.getElementById(`tab-${name}`).style.display = 'block';
+  el.classList.add('active');
+  if (name === 'portfolio') { loadPortfolio(); loadPendingOrders(); loadShortPositions(); loadLeveragedPositions(); }
+  if (name === 'history')   loadHistory();
+  if (name === 'news')      loadNews();
+  if (name === 'movers')    loadMovers(true);
+  if (name === 'analytics') loadAnalytics();
+}
+
+function navigateToStock(symbol, market) {
+  const marketTab = document.querySelector('#mainTabs .nav-link');
+  switchTab('market', marketTab);
+  document.getElementById('search-input').value = symbol;
+  document.getElementById('search-market').value = market;
+  fetchStockInfo(symbol, market);
+}
+
+// ══════════════════════════════════════════════
+// Stock search & info
+// ══════════════════════════════════════════════
+async function searchStock() {
+  const sym    = document.getElementById('search-input').value.trim().toUpperCase();
+  const market = document.getElementById('search-market').value;
+  if (!sym) return;
+  await fetchStockInfo(sym, market);
+}
+
+async function fetchStockInfo(sym, market) {
+  try {
+    const params = market !== 'auto' ? `?market=${market}` : '';
+    const info = await api(`/api/stock/${sym}${params}`);
+    currentSymbol   = info.symbol;
+    currentMarket   = info.market;
+    currentPrice    = info.price;
+    currentCurrency = info.currency;
+    renderStockInfo(info);
+    renderChart(sym, market);
+    showOrderForm(info);
+    refreshBalances();
+    loadStats(sym, market);
+    loadRelated(sym, market);
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+function renderStockInfo(info) {
+  document.getElementById('stock-detail').style.display      = 'block';
+  document.getElementById('stock-placeholder').style.display = 'none';
+
+  document.getElementById('si-name').textContent         = info.name;
+  document.getElementById('si-symbol-ticker').textContent = info.symbol;
+
+  const mb = document.getElementById('si-market-badge');
+  mb.textContent = info.market === 'KR' ? t('kr_label') : info.market === 'CRYPTO' ? t('crypto_label') : t('us_label');
+  mb.className   = `badge ${info.market === 'KR' ? 'bg-primary' : info.market === 'CRYPTO' ? 'bg-warning text-dark' : 'bg-danger'}`;
+
+  document.getElementById('si-status').innerHTML = info.market_open
+    ? `<span class="badge bg-success">${t('tradable')}</span>`
+    : `<span class="badge bg-secondary">${t('mkt_closed')}</span>`;
+
+  const up  = info.change >= 0;
+  const pre = info.currency === 'KRW' ? '₩' : '$';
+  const dec = info.currency === 'KRW' ? 0 : 2;
+  const sgn = up ? '+' : '';
+
+  const priceEl = document.getElementById('si-price');
+  priceEl.textContent = `${pre}${fmt(info.price, dec)}`;
+  priceEl.className   = `gf-price-main ${up ? 'up' : 'down'}`;
+
+  document.getElementById('si-change').innerHTML =
+    `<span class="${up?'up':'down'}">${sgn}${pre}${fmt(Math.abs(info.change), dec)}` +
+    ` (${sgn}${fmt(info.change_pct, 2)}%)</span>`;
+}
+
+// ══════════════════════════════════════════════
+// Chart
+// ══════════════════════════════════════════════
+function _getChartOptions() {
+  const d = theme === 'dark';
+  return {
+    layout: { background: { type: 'solid', color: d ? '#131722' : '#ffffff' }, textColor: d ? '#d1d4dc' : '#333' },
+    grid:   { vertLines: { color: d ? '#1e222d' : '#e0e3ea' }, horzLines: { color: d ? '#1e222d' : '#e0e3ea' } },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Magnet,
+      vertLine: {
+        visible: true, labelVisible: false,
+        style: LightweightCharts.LineStyle.Dashed,
+        width: 1, color: 'rgba(255,255,255,0.3)',
+      },
+      horzLine: {
+        visible: true, labelVisible: false,
+        style: LightweightCharts.LineStyle.Dashed,
+        width: 1, color: 'rgba(255,255,255,0.3)',
+      },
+    },
+    rightPriceScale: { borderColor: d ? '#2a2e39' : '#d0d3db' },
+    timeScale: {
+      borderColor: d ? '#2a2e39' : '#d0d3db',
+      timeVisible: false,
+      lockVisibleTimeRangeOnResize: true,
+      rightBarStaysOnScroll: true,
+      fixLeftEdge: true,
+      fixRightEdge: true,
+    },
+    handleScroll: false,
+    handleScale:  false,
+  };
+}
+
+function formatChartPrice(price, currency) {
+  if (currency === 'KRW') return '₩' + Math.round(price).toLocaleString('ko-KR');
+  return '$' + price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatChartDate(time) {
+  const isIntraday = (currentPeriod === '1d' || currentPeriod === '5d');
+  let date;
+  if (typeof time === 'number') {
+    date = new Date(time * 1000);
+  } else {
+    const parts = time.split('-');
+    date = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  }
+  const y = date.getFullYear(), mo = date.getMonth() + 1, d = date.getDate();
+  if (isIntraday) {
+    const h = date.getHours().toString().padStart(2, '0');
+    const m = date.getMinutes().toString().padStart(2, '0');
+    return `${y}년 ${mo}월 ${d}일 ${h}:${m}`;
+  }
+  return `${y}년 ${mo}월 ${d}일`;
+}
+
+function updateTooltip(price, time) {
+  document.getElementById('tooltip-price').textContent = formatChartPrice(price, currentCurrency);
+  document.getElementById('tooltip-date').textContent  = formatChartDate(time);
+}
+
+function showLatestTooltip() {
+  if (!activeSeries) return;
+  try {
+    const data = activeSeries.data();
+    if (!data || !data.length) return;
+    const last = data[data.length - 1];
+    updateTooltip(last.close ?? last.value ?? 0, last.time);
+  } catch (_) {}
+}
+
+async function renderChart(sym, market) {
+  const container = document.getElementById('chart-container');
+  document.getElementById('chart-loading').style.display = 'block';
+  container.style.visibility = 'hidden';
+  try {
+    const result = await api(`/api/stock/${sym}/chart?market=${market}&period=${currentPeriod}`);
+    const isLine = result.chart_type === 'line';
+
+    if (!chart) {
+      chart = LightweightCharts.createChart(container, { width: container.clientWidth, height: 360, ..._getChartOptions() });
+      window.addEventListener('resize', () => chart && chart.applyOptions({ width: container.clientWidth }));
+    } else {
+      chart.applyOptions(_getChartOptions());
+    }
+
+    // Remove old series and create new one matching type
+    if (activeSeries) {
+      chart.removeSeries(activeSeries);
+      activeSeries = null;
+    }
+
+    const isKRW = currentCurrency === 'KRW';
+    const priceFormat = {
+      type: 'custom',
+      minMove: isKRW ? 1 : 0.01,
+      formatter: isKRW
+        ? (p) => p.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+        : (p) => p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    };
+
+    if (isLine) {
+      activeSeries = chart.addAreaSeries({
+        lineColor: '#2962ff',
+        topColor:   'rgba(41,98,255,0.28)',
+        bottomColor:'rgba(41,98,255,0.02)',
+        lineWidth: 2,
+        priceFormat,
+      });
+      chart.applyOptions({ timeScale: { timeVisible: result.data.length > 0 && typeof result.data[0].time === 'number' } });
+    } else {
+      activeSeries = chart.addCandlestickSeries({
+        upColor:'#26a69a', downColor:'#ef5350',
+        borderUpColor:'#26a69a', borderDownColor:'#ef5350',
+        wickUpColor:'#26a69a', wickDownColor:'#ef5350',
+        priceFormat,
+      });
+      chart.applyOptions({ timeScale: { timeVisible: false } });
+    }
+
+    activeSeries.setData(result.data);
+    chart.timeScale().fitContent();
+    showLatestTooltip();
+
+    // Unsubscribe previous handler before re-registering
+    if (_crosshairHandler) {
+      try { chart.unsubscribeCrosshairMove(_crosshairHandler); } catch (_) {}
+    }
+    _crosshairHandler = (param) => {
+      if (!param.point || !param.time || param.point.x < 0 || param.point.y < 0) {
+        showLatestTooltip();
+        return;
+      }
+      const d = param.seriesData.get(activeSeries);
+      if (!d) return;
+      updateTooltip(d.close ?? d.value ?? 0, param.time);
+    };
+    chart.subscribeCrosshairMove(_crosshairHandler);
+
+  } catch (e) {
+    showToast(t('chart_fail') + e.message, 'error');
+  } finally {
+    document.getElementById('chart-loading').style.display = 'none';
+    container.style.visibility = 'visible';
+  }
+}
+
+function setPeriod(period, el) {
+  currentPeriod = period;
+  document.querySelectorAll('.gf-period-tab').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  if (currentSymbol) renderChart(currentSymbol, currentMarket);
+}
+
+// ══════════════════════════════════════════════
+// Stats
+// ══════════════════════════════════════════════
+async function loadStats(sym, market) {
+  const statsEl = document.getElementById('stock-stats');
+  statsEl.style.display = 'none';
+  try {
+    const s = await api(`/api/stock/${sym}/stats?market=${market}`);
+    if (!s || !Object.keys(s).length) return;
+    const pre = currentCurrency === 'KRW' ? '₩' : '$';
+    const dec = currentCurrency === 'KRW' ? 0 : 2;
+    document.getElementById('stat-open').textContent = s.open != null ? `${pre}${fmt(s.open, dec)}` : '—';
+    document.getElementById('stat-high').textContent = s.high != null ? `${pre}${fmt(s.high, dec)}` : '—';
+    document.getElementById('stat-low').textContent  = s.low  != null ? `${pre}${fmt(s.low,  dec)}` : '—';
+    document.getElementById('stat-per').textContent  = s.per  != null ? fmt(s.per, 2) : '—';
+    if (s.market_cap != null) {
+      document.getElementById('stat-mktcap').textContent = fmtLarge(s.market_cap, currentCurrency);
+    } else {
+      document.getElementById('stat-mktcap').textContent = '—';
+    }
+    if (s.week52_high != null && s.week52_low != null) {
+      document.getElementById('stat-52w').textContent =
+        `${pre}${fmt(s.week52_low, dec)} – ${pre}${fmt(s.week52_high, dec)}`;
+    } else {
+      document.getElementById('stat-52w').textContent = '—';
+    }
+    statsEl.style.display = 'grid';
+  } catch {}
+}
+
+function fmtLarge(n, currency) {
+  if (n == null) return '—';
+  const pre = currency === 'KRW' ? '₩' : '$';
+  if (currency === 'KRW') {
+    if (n >= 1e12) return `${pre}${fmt(n/1e12, 2)}조`;
+    if (n >= 1e8)  return `${pre}${fmt(n/1e8,  2)}억`;
+    return `${pre}${fmt(n, 0)}`;
+  }
+  if (n >= 1e12) return `${pre}${fmt(n/1e12, 2)}T`;
+  if (n >= 1e9)  return `${pre}${fmt(n/1e9,  2)}B`;
+  if (n >= 1e6)  return `${pre}${fmt(n/1e6,  2)}M`;
+  return `${pre}${fmt(n, 0)}`;
+}
+
+// ══════════════════════════════════════════════
+// Related stocks
+// ══════════════════════════════════════════════
+async function loadRelated(sym, market) {
+  const card    = document.getElementById('related-card');
+  const loading = document.getElementById('related-loading');
+  const list    = document.getElementById('related-list');
+  card.style.display    = 'block';
+  loading.style.display = 'block';
+  list.innerHTML = '';
+  try {
+    const stocks = await api(`/api/stock/${sym}/related?market=${market}`);
+    loading.style.display = 'none';
+    if (!stocks.length) { card.style.display = 'none'; return; }
+    list.innerHTML = stocks.map(s => {
+      const up  = s.change_pct >= 0;
+      const sgn = up ? '+' : '';
+      const pre = s.currency === 'KRW' ? '₩' : '$';
+      const dec = s.currency === 'KRW' ? 0 : 2;
+      return `<div class="related-item" onclick="searchRelated('${s.symbol}','${market}')" style="cursor:pointer;">
+        <div>
+          <div class="related-name">${s.name}</div>
+          <div class="related-ticker">${s.symbol}</div>
+        </div>
+        <div class="text-end">
+          <div class="related-price">${pre}${fmt(s.price, dec)}</div>
+          <div class="related-chg ${up?'up':'down'}">${sgn}${fmt(s.change_pct, 2)}%</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch {
+    loading.style.display = 'none';
+    card.style.display = 'none';
+  }
+}
+
+function searchRelated(sym, market) {
+  document.getElementById('search-input').value = sym;
+  document.getElementById('search-market').value = market;
+  fetchStockInfo(sym, market);
+}
+
+// ══════════════════════════════════════════════
+// Order form
+// ══════════════════════════════════════════════
+function showOrderForm(info) {
+  document.getElementById('order-card').style.display = 'block';
+  // CRYPTO: small step; KR: integer; US: small decimal
+  const qtyInput = document.getElementById('order-qty');
+  if (info.market === 'KR') {
+    qtyInput.step = '1'; qtyInput.placeholder = '0';
+  } else if (info.market === 'CRYPTO') {
+    qtyInput.step = '0.00001'; qtyInput.placeholder = '0.00001';
+  } else {
+    qtyInput.step = '0.0001'; qtyInput.placeholder = '0';
+  }
+  updateOrderLabels(info);
+  updateOrderButton();
+}
+
+function updateOrderLabels(info) {
+  if (!info) return;
+  const pre = info.currency === 'KRW' ? '₩' : '$';
+  const dec = info.currency === 'KRW' ? 0 : 2;
+  document.getElementById('amt-prefix').textContent          = pre;
+  document.getElementById('limit-price-prefix').textContent = pre;
+  document.getElementById('order-price-label').textContent  = `${pre}${fmt(info.price, dec)} ${info.currency}`;
+  const bal = balances[info.currency] || 0;
+  document.getElementById('order-balance-label').textContent = `${pre}${fmt(bal, dec)} ${info.currency}`;
+  updateHoldingDisplay();
+  // Update short leverage button visibility when market changes (do NOT reset value)
+  if (shortLeverageEnabled && info.market !== _lastLevMarket) {
+    _lastLevMarket = info.market;
+    updateShortLeverageSelectorForMarket();
+  }
+}
+
+function updateHoldingDisplay() {
+  const isSell = orderAction === 'sell';
+  const holdingRow = document.getElementById('holding-row');
+  const sellAllBtn = document.getElementById('sell-all-btn');
+  const qty = currentSymbol ? (_holdingsMap[currentSymbol] || 0) : 0;
+  if (holdingRow) {
+    holdingRow.style.setProperty('display', isSell && currentSymbol ? 'flex' : 'none', 'important');
+    if (isSell && currentSymbol) {
+      document.getElementById('holding-qty-label').textContent = fmt(qty, qty % 1 === 0 ? 0 : 6);
+    }
+  }
+  if (sellAllBtn) {
+    sellAllBtn.style.display = (isSell && orderMode === 'qty' && qty > 0) ? '' : 'none';
+  }
+}
+
+function fillSellAll() {
+  const qty = currentSymbol ? (_holdingsMap[currentSymbol] || 0) : 0;
+  if (qty > 0) {
+    const input = document.getElementById('order-qty');
+    input.value = qty;
+    updateShortCollateral();
+    updateLeverageInfo();
+  }
+}
+
+function setOrderAction(action) {
+  orderAction = action;
+  document.getElementById('btn-buy').className   = action === 'buy'
+    ? 'btn btn-sm order-tab-btn buy-active'
+    : 'btn btn-sm btn-outline-secondary order-tab-btn';
+  document.getElementById('btn-sell').className  = action === 'sell'
+    ? 'btn btn-sm order-tab-btn sell-active'
+    : 'btn btn-sm btn-outline-secondary order-tab-btn';
+  document.getElementById('btn-short').className = action === 'short'
+    ? 'btn btn-sm order-tab-btn short-active'
+    : 'btn btn-sm btn-outline-secondary order-tab-btn';
+
+  const isShort = action === 'short';
+  // Short: only qty mode makes sense; hide amt mode toggle
+  document.getElementById('order-mode-group').style.display = isShort ? 'none' : '';
+  document.getElementById('short-collateral-row').style.display = isShort ? '' : 'none';
+  if (isShort) {
+    document.getElementById('qty-group').style.display = '';
+    document.getElementById('amt-group').style.display = 'none';
+  } else {
+    setOrderMode(orderMode);
+  }
+
+  const btnCls = action === 'buy' ? 'btn-success' : action === 'sell' ? 'btn-danger' : 'btn-warning';
+  document.getElementById('order-btn').className = `btn w-100 fw-bold ${btnCls}`;
+
+  // Show short leverage group only on short market orders
+  const shortLevGroup = document.getElementById('short-leverage-group');
+  if (shortLevGroup) shortLevGroup.style.display = isShort ? '' : 'none';
+  if (!isShort && shortLeverageEnabled) {
+    shortLeverageEnabled = false;
+    document.getElementById('short-leverage-toggle').checked = false;
+    document.getElementById('short-leverage-selector').style.display = 'none';
+    document.getElementById('short-liq-row').style.display = 'none';
+  }
+
+  // Show leverage toggle only on buy market orders
+  const levGroup = document.getElementById('leverage-group');
+  if (levGroup) levGroup.style.display = (action === 'buy') ? '' : 'none';
+  if (action !== 'buy' && leverageEnabled) {
+    leverageEnabled = false;
+    const tog = document.getElementById('leverage-toggle');
+    if (tog) tog.checked = false;
+    document.getElementById('leverage-selector').style.display = 'none';
+    document.getElementById('leverage-info').style.display = 'none';
+  }
+
+  updateOrderButton();
+  updateShortCollateral();
+  updateShortLiqLabel();
+  updateHoldingDisplay();
+}
+
+function setOrderMode(mode) {
+  orderMode = mode;
+  document.getElementById('mode-qty').classList.toggle('active', mode === 'qty');
+  document.getElementById('mode-amt').classList.toggle('active', mode === 'amt');
+  document.getElementById('qty-group').style.display = mode === 'qty' ? '' : 'none';
+  document.getElementById('amt-group').style.display = mode === 'amt' ? '' : 'none';
+  updateHoldingDisplay();
+}
+
+function setOrderType(type) {
+  orderType = type;
+  document.getElementById('type-market').classList.toggle('active', type === 'market');
+  document.getElementById('type-limit').classList.toggle('active',  type === 'limit');
+  document.getElementById('limit-price-group').style.display = type === 'limit' ? '' : 'none';
+  document.getElementById('order-mode-group').style.display  = type === 'limit' ? 'none' : '';
+  // Leverage only available for market buy orders; short leverage for market short
+  const levGroup = document.getElementById('leverage-group');
+  if (levGroup) levGroup.style.display = (type === 'market' && orderAction === 'buy') ? '' : 'none';
+  const shortLevGroup = document.getElementById('short-leverage-group');
+  if (shortLevGroup) shortLevGroup.style.display = (type === 'market' && orderAction === 'short') ? '' : 'none';
+  if (type === 'limit') {
+    document.getElementById('qty-group').style.display = '';
+    document.getElementById('amt-group').style.display = 'none';
+  } else {
+    setOrderMode(orderMode);
+  }
+  updateOrderButton();
+}
+
+function updateOrderButton() {
+  if (!currentMarket) return;
+  const isOpen = currentMarket === 'CRYPTO' ? true
+               : currentMarket === 'KR'     ? marketStatus.kr_open
+               : marketStatus.us_open;
+  const btn    = document.getElementById('order-btn');
+  const notice = document.getElementById('market-closed-notice');
+  if (orderType === 'limit') {
+    btn.disabled         = false;
+    notice.style.display = 'none';
+    btn.textContent = orderAction === 'buy' ? t('order_btn_limit_buy') : t('order_btn_limit_sell');
+  } else if (orderAction === 'short') {
+    btn.disabled         = !isOpen;
+    notice.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen) {
+      btn.textContent = t('order_btn_closed');
+    } else if (shortLeverageEnabled) {
+      const ld = Number.isInteger(currentShortLeverage) ? currentShortLeverage : currentShortLeverage.toFixed(1);
+      btn.textContent = `${t('order_btn_short')} ${ld}×`;
+    } else {
+      btn.textContent = t('order_btn_short');
+    }
+  } else {
+    btn.disabled         = !isOpen;
+    notice.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen) {
+      btn.textContent = t('order_btn_closed');
+    } else if (orderAction === 'buy' && leverageEnabled) {
+      const ld = Number.isInteger(currentLeverage) ? currentLeverage : currentLeverage.toFixed(1);
+      btn.textContent = `${t('order_btn_lev_buy')} ${ld}×`;
+    } else {
+      btn.textContent = orderAction === 'buy' ? t('order_btn_buy') : t('order_btn_sell');
+    }
+  }
+}
+
+let pendingOrder   = null;
+let orderConfirmModal = null;
+
+function placeOrder() {
+  if (orderType === 'limit') { placeLimitOrder(); return; }
+  if (orderAction === 'short') { placeShortOrder(); return; }
+  if (!currentSymbol) return;
+  const body = { symbol: currentSymbol, market: currentMarket, action: orderAction };
+  if (orderMode === 'qty') {
+    const v = parseFloat(document.getElementById('order-qty').value);
+    if (!v || v <= 0) { showToast(t('err_qty'), 'error'); return; }
+    body.quantity = v;
+  } else {
+    const v = parseNum('order-amt');
+    if (!v || v <= 0) { showToast(t('err_amt'), 'error'); return; }
+    body.amount = v;
+  }
+
+  // ── compute preview totals ────────────────────────────
+  const qty        = body.quantity ?? (body.amount / currentPrice);
+  const feeRate    = currentFeeRates[currentMarket] ?? ORDER_FEE[currentMarket] ?? 0;
+  const taxRate    = (orderAction === 'sell' && currentMarket === 'KR') ? KRX_SELL_TAX : 0;
+  const pre        = currentCurrency === 'KRW' ? '₩' : '$';
+  const dec        = currentCurrency === 'KRW' ? 0 : 2;
+  const baseTotal  = qty * currentPrice;
+  const feeAmount  = baseTotal * feeRate;
+  const taxAmount  = baseTotal * taxRate;
+  const secFee     = (orderAction === 'sell' && currentMarket === 'US')
+    ? Math.max(0.01, Math.ceil(baseTotal * SEC_FEE_PER_DOLLAR * 100) / 100)
+    : 0;
+  const finalTotal = orderAction === 'buy'
+    ? baseTotal + feeAmount
+    : baseTotal - feeAmount - taxAmount - secFee;
+
+  // ── slippage tier preview ─────────────────────────────
+  const priceUsd      = currentMarket === 'KR' ? currentPrice / (fxRate?.rate || 1380) : currentPrice;
+  const orderValueUsd = qty * priceUsd;
+  const maxSlipPct    = getMaxSlippagePct(orderValueUsd, currentMarket);
+  const slipRow       = document.getElementById('oc-slip-row');
+  const slipNote      = document.getElementById('oc-slip-note');
+  if (maxSlipPct > 0) {
+    document.getElementById('oc-slip').textContent = `±${(maxSlipPct * 100).toFixed(2)}%`;
+    slipRow.style.display  = '';
+    slipNote.style.display = '';
+  } else {
+    slipRow.style.display  = 'none';
+    slipNote.style.display = 'none';
+  }
+
+  // ── populate modal ────────────────────────────────────
+  const isBuy  = orderAction === 'buy';
+  const fmtPre = n => `${pre}${fmt(n, dec)}`;
+  document.getElementById('oc-title').textContent =
+    `${t(isBuy ? 'buy' : 'sell')} — ${currentSymbol}`;
+  document.getElementById('oc-market-price').textContent = fmtPre(currentPrice);
+  document.getElementById('oc-subtotal-label').textContent =
+    maxSlipPct > 0 ? t('order_subtotal_est') : t('order_subtotal');
+  document.getElementById('oc-subtotal').textContent =
+    `${fmtPre(baseTotal)}  (${fmt(qty, currentMarket === 'KR' ? 0 : 4)}${t('shares_unit')} × ${fmtPre(currentPrice)})`;
+  const tierSuffix = (currentFeeTier && currentMarket !== 'CRYPTO')
+    ? ` · ${t('tier_' + currentFeeTier.name.toLowerCase())}` : '';
+  document.getElementById('oc-fee-label').textContent =
+    `${t('order_fee')} (${(feeRate * 100).toFixed(3)}%${tierSuffix})`;
+  document.getElementById('oc-fee').textContent = fmtPre(feeAmount);
+
+  const taxRow = document.getElementById('oc-tax-row');
+  if (taxRate > 0) {
+    document.getElementById('oc-tax-label').textContent =
+      `${t('order_tax')} (${(taxRate * 100).toFixed(2)}%)`;
+    document.getElementById('oc-tax').textContent = fmtPre(taxAmount);
+    taxRow.style.display = '';
+  } else {
+    taxRow.style.display = 'none';
+  }
+
+  const secRow = document.getElementById('oc-sec-row');
+  if (secFee > 0) {
+    document.getElementById('oc-sec').textContent = `$${fmt(secFee, 2)}`;
+    secRow.style.display = '';
+  } else {
+    secRow.style.display = 'none';
+  }
+
+  document.getElementById('oc-total-label').textContent =
+    maxSlipPct > 0
+      ? t(isBuy ? 'order_total_deduct_est' : 'order_total_receive_est')
+      : t(isBuy ? 'order_total_deduct' : 'order_total_receive');
+  document.getElementById('oc-total').textContent = fmtPre(finalTotal);
+
+  // ── Leverage rows ─────────────────────────────────────
+  const levSection = document.getElementById('oc-lev-section');
+  if (leverageEnabled && isBuy) {
+    const lev         = currentLeverage;
+    const marginAmt   = baseTotal / lev;
+    const borrowedAmt = baseTotal - marginAmt;
+    const liqPrc      = currentPrice * (1 - 1 / lev + 0.005);
+    const movePct     = (1 / lev - 0.005) * 100;
+    // Market-specific daily interest rate (mirrors server constants)
+    const interestRates = { KR: 0.00022, US: 0.00018 };
+    const dailyRate     = interestRates[currentMarket] ?? 0.0003;
+    const dailyInterest = borrowedAmt * dailyRate;
+    document.getElementById('oc-lev-margin').textContent   = fmtPre(marginAmt + feeAmount);
+    document.getElementById('oc-lev-borrowed').textContent = fmtPre(borrowedAmt);
+    document.getElementById('oc-lev-liq').textContent      = fmtPre(liqPrc);
+    document.getElementById('oc-lev-move').textContent     = `${fmt(movePct, 2)}%`;
+    document.getElementById('oc-lev-interest').textContent = fmtPre(dailyInterest);
+    levSection.style.display = '';
+    body.leverage = lev;
+    document.getElementById('oc-total-label').textContent = t('lev_margin_label');
+    document.getElementById('oc-total').textContent       = fmtPre(marginAmt + feeAmount);
+    // Acknowledgement checkbox: required for leverage >= 10×
+    const ackEl  = document.getElementById('oc-lev-ack');
+    const ackChk = document.getElementById('oc-lev-ack-chk');
+    if (lev >= 10) {
+      ackEl.style.display  = '';
+      ackChk.checked       = false;
+      document.getElementById('oc-confirm-btn').disabled = true;
+    } else {
+      ackEl.style.display  = 'none';
+      document.getElementById('oc-confirm-btn').disabled = false;
+    }
+  } else {
+    levSection.style.display = 'none';
+    document.getElementById('oc-lev-ack').style.display = 'none';
+    document.getElementById('oc-confirm-btn').disabled  = false;
+    delete body.leverage;
+  }
+
+  const confirmBtn = document.getElementById('oc-confirm-btn');
+  if (leverageEnabled && isBuy) {
+    const levDisplay = Number.isInteger(currentLeverage) ? currentLeverage : currentLeverage.toFixed(1);
+    confirmBtn.textContent = `${t('order_btn_lev_buy')} ${levDisplay}×`;
+    confirmBtn.className   = 'btn w-50 fw-bold btn-success';
+  } else {
+    confirmBtn.textContent = t(isBuy ? 'order_btn_buy' : 'order_btn_sell');
+    confirmBtn.className   = `btn w-50 fw-bold ${isBuy ? 'btn-success' : 'btn-danger'}`;
+  }
+
+  pendingOrder = body;
+  if (!orderConfirmModal)
+    orderConfirmModal = new bootstrap.Modal(document.getElementById('orderConfirmModal'));
+  orderConfirmModal.show();
+}
+
+async function confirmOrder() {
+  if (!pendingOrder) return;
+  const body = pendingOrder;
+  pendingOrder = null;
+  orderConfirmModal.hide();
+
+  const btn = document.getElementById('order-btn');
+  btn.disabled = true;
+  try {
+    let res;
+    if (body.leverage) {
+      res = await api('/api/leverage/open', 'POST', {
+        symbol: body.symbol, market: body.market,
+        quantity: body.quantity ?? (body.amount / currentPrice),
+        leverage: body.leverage,
+      });
+      loadLeveragedPositions();
+    } else {
+      res = await api('/api/order', 'POST', body);
+    }
+    showToast(res.message, 'success');
+    await refreshBalances();
+    if (currentPrice) updateOrderLabels({ price: currentPrice, currency: currentCurrency });
+  } catch (e) {
+    const isBalErr = e.message.includes('잔고 부족') || e.message.includes('Insufficient');
+    if (isBalErr) {
+      const presetDir = currentCurrency === 'USD' ? 'KRW_TO_USD' : 'USD_TO_KRW';
+      const wrap = document.getElementById('toast-wrap');
+      const el   = document.createElement('div');
+      el.className = 'toast-msg error';
+      el.innerHTML = `<i class="bi bi-exclamation-circle me-2"></i>${e.message}<br>
+        <a href="#" onclick="openExchange('${presetDir}'); this.closest('.toast-msg').remove(); return false;"
+           style="color:#fff; font-weight:600; text-decoration:underline; font-size:.82rem;">
+          ${t('exchange_btn')} →
+        </a>`;
+      wrap.appendChild(el);
+      setTimeout(() => el.remove(), 6000);
+    } else {
+      showToast(e.message, 'error');
+    }
+  } finally {
+    btn.disabled = false;
+    updateOrderButton();
+  }
+}
+
+async function placeLimitOrder() {
+  if (!currentSymbol) return;
+  const qty = parseFloat(document.getElementById('order-qty').value);
+  if (!qty || qty <= 0) { showToast(t('err_qty'), 'error'); return; }
+  const lp = parseFloat(document.getElementById('limit-price').value);
+  if (!lp || lp <= 0) { showToast(t('err_limit_price'), 'error'); return; }
+
+  const body = {
+    symbol:      currentSymbol,
+    market:      currentMarket,
+    order_type:  orderAction === 'buy' ? 'LIMIT_BUY' : 'LIMIT_SELL',
+    quantity:    qty,
+    limit_price: lp,
+  };
+
+  const btn = document.getElementById('order-btn');
+  btn.disabled = true;
+  try {
+    const res = await api('/api/order/limit', 'POST', body);
+    showToast(res.message, 'success');
+    await refreshBalances();
+    _pendingInitialized = false;
+    loadPendingOrders();
+  } catch (e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    updateOrderButton();
+  }
+}
+
+async function loadPendingOrders() {
+  const tbody = document.getElementById('orders-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="7" class="empty-state"><div class="spinner-border spinner-border-sm me-2"></div>${t('loading')}</td></tr>`;
+  try {
+    const orders = await api('/api/orders/pending');
+    renderPendingOrders(orders);
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-state text-danger">${e.message}</td></tr>`;
+  }
+}
+
+function renderPendingOrders(orders) {
+  const tbody = document.getElementById('orders-tbody');
+  if (!tbody) return;
+  if (!orders.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-state">${t('no_open_orders')}</td></tr>`;
+    return;
+  }
+  const locale = lang === 'ko' ? 'ko-KR' : 'en-US';
+  // Group OCO pairs so they render together
+  const ocoMap = {};
+  const rows = [];
+  orders.forEach(o => {
+    if (o.oco_group_id) (ocoMap[o.oco_group_id] = ocoMap[o.oco_group_id] || []).push(o);
+    else rows.push([o]);
+  });
+  Object.values(ocoMap).forEach(pair => rows.push(pair));
+
+  tbody.innerHTML = rows.map(group => {
+    if (group.length === 2) {
+      // OCO pair — render as one merged row
+      const sl  = group.find(o => o.trigger_type === 'STOP_LOSS')  || group[0];
+      const tp  = group.find(o => o.trigger_type === 'TAKE_PROFIT') || group[1];
+      const pre = sl.currency === 'KRW' ? '₩' : '$';
+      const dec = sl.currency === 'KRW' ? 0 : 2;
+      const dt  = new Date(sl.created_at).toLocaleString(locale, { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+      const cancelIds = group.map(o => o.id);
+      return `<tr>
+        <td class="text-secondary" style="font-size:.82rem;">${dt}</td>
+        <td><strong class="holding-link" style="cursor:pointer;color:var(--accent);" onclick="navigateToStock('${sl.ticker}','${sl.market}')">${sl.ticker}</strong></td>
+        <td><span class="badge ${sl.market==='KR'?'bg-primary':sl.market==='CRYPTO'?'bg-warning text-dark':'bg-danger'}">${sl.market}</span></td>
+        <td>
+          <i class="bi bi-link-45deg text-warning me-1" title="OCO"></i>
+          <span class="badge bg-danger me-1">SL</span>${pre}${fmt(sl.limit_price, dec)}
+          <span class="text-secondary mx-1">/</span>
+          <span class="badge bg-success me-1">TP</span>${pre}${fmt(tp.limit_price, dec)}
+        </td>
+        <td class="text-end">${fmt(sl.quantity, sl.market==='KR'?0:4)}</td>
+        <td class="text-end text-secondary">—</td>
+        <td class="text-end"><button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="cancelOcoGroup([${cancelIds.join(',')}])">${t('cancel_order_btn')}</button></td>
+      </tr>`;
+    }
+    const o   = group[0];
+    const pre = o.currency === 'KRW' ? '₩' : '$';
+    const dec = o.currency === 'KRW' ? 0 : 2;
+    const isBuy = o.order_type === 'LIMIT_BUY';
+    const dt  = new Date(o.created_at).toLocaleString(locale, { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+    let typeBadge;
+    if (o.trigger_type === 'STOP_LOSS')       typeBadge = `<span class="badge bg-danger">SL</span>`;
+    else if (o.trigger_type === 'TAKE_PROFIT') typeBadge = `<span class="badge bg-success">TP</span>`;
+    else typeBadge = isBuy ? `<span class="badge bg-success">${t('action_buy')}</span>` : `<span class="badge bg-danger">${t('action_sell')}</span>`;
+    return `<tr>
+      <td class="text-secondary" style="font-size:.82rem;">${dt}</td>
+      <td><strong class="holding-link" style="cursor:pointer;color:var(--accent);" onclick="navigateToStock('${o.ticker}','${o.market}')">${o.ticker}</strong></td>
+      <td><span class="badge ${o.market==='KR'?'bg-primary':o.market==='CRYPTO'?'bg-warning text-dark':'bg-danger'}">${o.market}</span></td>
+      <td>${typeBadge}</td>
+      <td class="text-end">${fmt(o.quantity, o.market==='KR'?0:4)}</td>
+      <td class="text-end">${pre}${fmt(o.limit_price, dec)}</td>
+      <td class="text-end"><button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="cancelOrder(${o.id})">${t('cancel_order_btn')}</button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function cancelOrder(id) {
+  try {
+    await api(`/api/order/${id}`, 'DELETE');
+    showToast(t('order_cancelled'), 'success');
+    await refreshBalances();
+    loadPendingOrders();
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+async function cancelOcoGroup(ids) {
+  try {
+    await Promise.all(ids.map(id => api(`/api/order/${id}`, 'DELETE')));
+    showToast(t('order_cancelled'), 'success');
+    await refreshBalances();
+    loadPendingOrders();
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+// ══════════════════════════════════════════════
+// Leverage trading
+// ══════════════════════════════════════════════
+function updateLeverageSelectorForMarket() {
+  const m = currentMarket || 'US';
+  document.getElementById('lev-btns-krx').style.display    = (m === 'KR')     ? '' : 'none';
+  document.getElementById('lev-btns-us').style.display     = (m === 'US')     ? '' : 'none';
+  document.getElementById('lev-btns-crypto').style.display = (m === 'CRYPTO') ? '' : 'none';
+  // Set sensible default leverage per market
+  const defaultLev = m === 'KR' ? 2 : m === 'CRYPTO' ? 2 : 2;
+  setLeverage(defaultLev);
+}
+
+function toggleLeverage(on) {
+  leverageEnabled = on;
+  if (on) {
+    updateLeverageSelectorForMarket();
+    document.getElementById('leverage-selector').style.display = '';
+    document.getElementById('leverage-info').style.display     = '';
+    updateLeverageInfo();
+  } else {
+    document.getElementById('leverage-selector').style.display = 'none';
+    document.getElementById('leverage-info').style.display     = 'none';
+    const w = document.getElementById('lev-risk-warning');
+    if (w) w.style.display = 'none';
+  }
+  updateOrderButton();
+}
+
+function setLeverage(n) {
+  currentLeverage = n;
+  const m = currentMarket || 'US';
+  if (m === 'KR') {
+    document.querySelectorAll('#lev-btns-krx .btn').forEach(b => {
+      b.classList.toggle('active', parseFloat(b.textContent) === n);
+    });
+  } else if (m === 'US') {
+    document.querySelectorAll('#lev-btns-us .btn').forEach(b => {
+      b.classList.toggle('active', parseFloat(b.textContent) === n);
+    });
+  } else {
+    const slider = document.getElementById('lev-crypto-slider');
+    const num    = document.getElementById('lev-crypto-num');
+    if (slider) slider.value = n;
+    if (num)    num.value    = n;
+  }
+  updateLeverageInfo();
+  updateOrderButton();
+}
+
+function onCryptoLeverageInput(val) {
+  const n = Math.min(125, Math.max(1, parseFloat(val) || 1));
+  currentLeverage = Math.round(n * 10) / 10;
+  const slider = document.getElementById('lev-crypto-slider');
+  const num    = document.getElementById('lev-crypto-num');
+  if (slider) slider.value = currentLeverage;
+  if (num)    num.value    = currentLeverage;
+  updateLeverageInfo();
+  updateOrderButton();
+}
+
+function updateLeverageInfo() {
+  if (!leverageEnabled || !currentPrice) return;
+  const qty = parseFloat(document.getElementById('order-qty').value) || 0;
+  if (qty <= 0) return;
+  const pre         = currentCurrency === 'KRW' ? '₩' : '$';
+  const dec         = currentCurrency === 'KRW' ? 0 : 2;
+  const lev         = currentLeverage;
+  const positionVal = qty * currentPrice;
+  const margin      = positionVal / lev;
+  const borrowed    = positionVal - margin;
+  const liqPrice    = currentPrice * (1 - 1 / lev + 0.005);
+  const movePct     = ((1 / lev - 0.005) * 100);
+
+  document.getElementById('lev-margin-amt').textContent   = `${pre}${fmt(margin, dec)}`;
+  document.getElementById('lev-borrowed-amt').textContent = `${pre}${fmt(borrowed, dec)}`;
+  document.getElementById('lev-liq-price').textContent    = `${pre}${fmt(liqPrice, dec)}`;
+  document.getElementById('lev-move-to-liq').textContent  = `${fmt(movePct, 2)}%`;
+
+  const warnEl = document.getElementById('lev-risk-warning');
+  if (!warnEl) return;
+  if (lev >= 50) {
+    warnEl.style.display = '';
+    warnEl.innerHTML = `⚠️ ${t('lev_extreme_warn_1').replace('{x}', lev).replace('{pct}', fmt(movePct, 2))}`
+      + (lev >= 100 ? `<br><strong>${t('lev_extreme_warn_2')}</strong>` : '');
+  } else if (lev >= 20) {
+    warnEl.style.display = '';
+    warnEl.textContent   = `⚠️ ${t('lev_high_warn').replace('{x}', lev).replace('{pct}', fmt(movePct, 2))}`;
+  } else {
+    warnEl.style.display = 'none';
+  }
+}
+
+async function loadLeveragedPositions() {
+  const tbody = document.getElementById('lev-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="9" class="empty-state"><div class="spinner-border spinner-border-sm me-2"></div>${t('loading')}</td></tr>`;
+  try {
+    const positions = await api('/api/leverage/positions');
+    renderLeveragedPositions(positions);
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="9" class="empty-state text-danger">${e.message}</td></tr>`;
+  }
+}
+
+function renderLeveragedPositions(positions) {
+  const tbody = document.getElementById('lev-tbody');
+  if (!tbody) return;
+  if (!positions.length) {
+    tbody.innerHTML = `<tr><td colspan="9" class="empty-state">${t('no_lev_positions')}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = positions.map(p => {
+    const pre    = p.currency === 'KRW' ? '₩' : '$';
+    const dec    = p.currency === 'KRW' ? 0 : 2;
+    const plCls  = p.unrealized_pnl > 0 ? 'kr-up' : p.unrealized_pnl < 0 ? 'kr-down' : '';
+    const plSign = p.unrealized_pnl > 0 ? '+' : '';
+    const nearBadge = p.near_liquidation
+      ? `<span class="badge bg-danger ms-1" style="font-size:.65rem;">${t('lev_near_liq_badge')}</span>`
+      : '';
+    const rowStyle = p.near_liquidation ? 'style="background:rgba(239,83,80,.12);"' : '';
+    return `<tr ${rowStyle}>
+      <td><strong class="holding-link" style="cursor:pointer;color:var(--accent);" onclick="navigateToStock('${p.ticker}','${p.market}')">${p.ticker}</strong>${nearBadge}</td>
+      <td><span class="badge ${p.market==='KR'?'bg-primary':'bg-danger'}">${p.market}</span></td>
+      <td class="text-center"><span class="badge bg-warning text-dark fw-bold">${p.leverage}×</span></td>
+      <td class="text-end">${pre}${fmt(p.entry_price, dec)}</td>
+      <td class="text-end">${pre}${fmt(p.current_price, dec)}</td>
+      <td class="text-end ${plCls}">${plSign}${pre}${fmt(Math.abs(p.unrealized_pnl), dec)}</td>
+      <td class="text-end text-danger">${pre}${fmt(p.liquidation_price, dec)}</td>
+      <td class="text-end text-warning">${pre}${fmt(p.interest_accrued, dec)}</td>
+      <td class="text-center">
+        <button class="btn btn-sm btn-outline-danger py-0 px-2"
+          onclick="closeLeveragedPosition(${p.id})">${t('lev_close_btn')}</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function closeLeveragedPosition(positionId) {
+  try {
+    const res = await api('/api/leverage/close', 'POST', { position_id: positionId });
+    const pre  = res.currency === 'KRW' ? '₩' : '$';
+    const dec  = res.currency === 'KRW' ? 0 : 2;
+    const sign = res.net_proceeds >= 0 ? '+' : '';
+    showToast(`${res.message} (순수익: ${sign}${pre}${fmt(Math.abs(res.net_proceeds), dec)})`,
+              res.net_proceeds >= 0 ? 'success' : 'error');
+    await refreshBalances();
+    loadLeveragedPositions();
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+// ══════════════════════════════════════════════
+// Short selling
+// ══════════════════════════════════════════════
+let pendingShortOrder  = null;
+let shortConfirmModal  = null;
+let shortLeverageEnabled = false;
+let currentShortLeverage = 2.0;
+let _lastLevMarket = null;
+
+function toggleShortLeverage(enabled) {
+  shortLeverageEnabled = enabled;
+  document.getElementById('short-leverage-selector').style.display = enabled ? '' : 'none';
+  if (enabled) updateShortLeverageSelectorForMarket();
+  updateOrderButton();
+  updateShortCollateral();
+  updateShortLiqLabel();
+}
+
+function updateShortLeverageSelectorForMarket() {
+  ['short-lev-btns-krx','short-lev-btns-us','short-lev-btns-crypto'].forEach(id => {
+    document.getElementById(id).style.display = 'none';
+  });
+  if (currentMarket === 'KR') {
+    document.getElementById('short-lev-btns-krx').style.display = '';
+    setShortLeverage(1.5);
+  } else if (currentMarket === 'US') {
+    document.getElementById('short-lev-btns-us').style.display = '';
+    setShortLeverage(2.0);
+  } else {
+    document.getElementById('short-lev-btns-crypto').style.display = '';
+    setShortLeverage(2.0);
+  }
+}
+
+function setShortLeverage(val) {
+  currentShortLeverage = val;
+  const mkt = currentMarket;
+  const btns = mkt === 'KR' ? document.querySelectorAll('#short-lev-btns-krx .btn')
+             : mkt === 'US' ? document.querySelectorAll('#short-lev-btns-us .btn')
+             : [];
+  btns.forEach(b => {
+    b.classList.toggle('active', parseFloat(b.textContent) === val);
+  });
+  updateOrderButton();
+  updateShortCollateral();
+  updateShortLiqLabel();
+}
+
+function onShortCryptoLeverageInput(val) {
+  const v = Math.min(125, Math.max(1, parseFloat(val) || 1));
+  currentShortLeverage = v;
+  document.getElementById('short-lev-crypto-slider').value = v;
+  document.getElementById('short-lev-crypto-num').value = v;
+  updateOrderButton();
+  updateShortCollateral();
+  updateShortLiqLabel();
+}
+
+function updateShortCollateral() {
+  const row = document.getElementById('short-collateral-row');
+  const lbl = document.getElementById('short-collateral-label');
+  if (!row || !lbl) return;
+  if (orderAction !== 'short' || !currentPrice) return;
+  const qty = parseFloat(document.getElementById('order-qty').value) || 0;
+  if (qty > 0) {
+    const pre = currentCurrency === 'KRW' ? '₩' : '$';
+    const dec = currentCurrency === 'KRW' ? 0 : 2;
+    const lev = shortLeverageEnabled ? currentShortLeverage : 1.0;
+    const margin = shortLeverageEnabled
+      ? qty * currentPrice / lev
+      : qty * currentPrice * 1.5;
+    lbl.textContent = `${pre}${fmt(margin, dec)}`;
+  } else {
+    lbl.textContent = '—';
+  }
+}
+
+function updateShortLiqLabel() {
+  const row = document.getElementById('short-liq-row');
+  const lbl = document.getElementById('short-liq-label');
+  if (!row || !lbl) return;
+  if (!shortLeverageEnabled || orderAction !== 'short' || !currentPrice) {
+    row.style.display = 'none';
+    return;
+  }
+  row.style.display = '';
+  const pre = currentCurrency === 'KRW' ? '₩' : '$';
+  const dec = currentCurrency === 'KRW' ? 0 : 2;
+  lbl.textContent = `${pre}${fmt(currentPrice * (1 + 1 / currentShortLeverage), dec)}`;
+}
+
+function placeShortOrder() {
+  if (!currentSymbol) return;
+  const qty = parseFloat(document.getElementById('order-qty').value);
+  if (!qty || qty <= 0) { showToast(t('err_qty'), 'error'); return; }
+
+  const pre      = currentCurrency === 'KRW' ? '₩' : '$';
+  const dec      = currentCurrency === 'KRW' ? 0 : 2;
+  const feeRate  = currentFeeRates[currentMarket] ?? ORDER_FEE[currentMarket] ?? 0;
+  const baseTotal = qty * currentPrice;
+  const feeAmount = baseTotal * feeRate;
+  const lev = shortLeverageEnabled ? currentShortLeverage : 1.0;
+  const margin = shortLeverageEnabled ? baseTotal / lev : baseTotal * 1.5;
+
+  document.getElementById('sc-entry-price').textContent = `${pre}${fmt(currentPrice, dec)}`;
+  document.getElementById('sc-qty').textContent         = `${fmt(qty, currentMarket === 'KR' ? 0 : 4)}${t('shares_unit')}`;
+  document.getElementById('sc-fee').textContent         = `${pre}${fmt(feeAmount, dec)}`;
+  document.getElementById('sc-collateral').textContent  = `${pre}${fmt(margin, dec)}`;
+
+  const levRow = document.getElementById('sc-leverage-row');
+  const liqRow = document.getElementById('sc-liq-row');
+  if (shortLeverageEnabled) {
+    levRow.style.display = '';
+    liqRow.style.display = '';
+    document.getElementById('sc-leverage').textContent   = `${lev}×`;
+    document.getElementById('sc-liq-price').textContent  = `${pre}${fmt(currentPrice * (1 + 1/lev), dec)}`;
+  } else {
+    levRow.style.display = 'none';
+    liqRow.style.display = 'none';
+  }
+
+  pendingShortOrder = { symbol: currentSymbol, market: currentMarket, quantity: qty, leverage: lev };
+  if (!shortConfirmModal)
+    shortConfirmModal = new bootstrap.Modal(document.getElementById('shortConfirmModal'));
+  shortConfirmModal.show();
+}
+
+async function confirmShortOrder() {
+  if (!pendingShortOrder) return;
+  const body = pendingShortOrder;
+  pendingShortOrder = null;
+  shortConfirmModal.hide();
+
+  const btn = document.getElementById('order-btn');
+  btn.disabled = true;
+  try {
+    const res = await api('/api/short/open', 'POST', body);
+    showToast(res.message, 'success');
+    await refreshBalances();
+    loadShortPositions();
+  } catch (e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    updateOrderButton();
+  }
+}
+
+async function loadShortPositions() {
+  const tbody = document.getElementById('short-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="8" class="empty-state"><div class="spinner-border spinner-border-sm me-2"></div>${t('loading')}</td></tr>`;
+  try {
+    const positions = await api('/api/short/positions');
+    renderShortPositions(positions);
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-state text-danger">${e.message}</td></tr>`;
+  }
+}
+
+function renderShortPositions(positions) {
+  const tbody = document.getElementById('short-tbody');
+  if (!tbody) return;
+  if (!positions.length) {
+    tbody.innerHTML = `<tr><td colspan="10" class="empty-state">${t('no_short_positions')}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = positions.map(p => {
+    const pre    = p.currency === 'KRW' ? '₩' : '$';
+    const dec    = p.currency === 'KRW' ? 0 : 2;
+    const plCls  = p.unrealized_pl > 0 ? 'kr-up' : p.unrealized_pl < 0 ? 'kr-down' : '';
+    const plSign = p.unrealized_pl > 0 ? '+' : '';
+    const mcBadge = p.margin_call
+      ? `<span class="badge bg-danger ms-1" style="font-size:.65rem;">${t('margin_call_badge')}</span>`
+      : '';
+    const rowStyle = p.margin_call ? 'style="background:rgba(239,83,80,.12);"' : '';
+    const levBadge = p.leverage > 1
+      ? `<span class="badge bg-warning text-dark fw-bold">${p.leverage}×</span>`
+      : `<span class="text-secondary">—</span>`;
+    const liqCell = p.liquidation_price != null
+      ? `<span style="color:#dc3545;">${pre}${fmt(p.liquidation_price, dec)}</span>`
+      : `<span class="text-secondary">—</span>`;
+    return `<tr ${rowStyle}>
+      <td><strong class="holding-link" style="cursor:pointer;color:var(--accent);" onclick="navigateToStock('${p.ticker}','${p.market}')">${p.ticker}</strong>${mcBadge}</td>
+      <td><span class="badge ${p.market==='KR'?'bg-primary':'bg-danger'}">${p.market}</span></td>
+      <td class="text-center">${levBadge}</td>
+      <td class="text-end">${pre}${fmt(p.entry_price, dec)}</td>
+      <td class="text-end">${pre}${fmt(p.current_price, dec)}</td>
+      <td class="text-end">${fmt(p.quantity, p.market==='KR'?0:4)}</td>
+      <td class="text-end ${plCls}">${plSign}${pre}${fmt(Math.abs(p.unrealized_pl), dec)}</td>
+      <td class="text-end">${liqCell}</td>
+      <td class="text-end text-warning">${pre}${fmt(p.borrow_fee_accrued, dec)}</td>
+      <td class="text-center">
+        <button class="btn btn-sm btn-outline-danger py-0 px-2"
+          onclick="closeShortPosition(${p.id})">${t('short_close_btn')}</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function closeShortPosition(positionId) {
+  try {
+    const res = await api('/api/short/close', 'POST', { position_id: positionId });
+    const pre  = res.currency === 'KRW' ? '₩' : '$';
+    const dec  = res.currency === 'KRW' ? 0 : 2;
+    const sign = res.pnl >= 0 ? '+' : '';
+    showToast(`${res.message} (P&L: ${sign}${pre}${fmt(Math.abs(res.pnl), dec)})`,
+              res.pnl >= 0 ? 'success' : 'error');
+    await refreshBalances();
+    loadShortPositions();
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+function openSlTpModal(symbol, market, availableQty, currentPrice, currency) {
+  _sltpState = { symbol, market, availableQty, currentPrice, currency };
+  document.getElementById('sltp-symbol').textContent = symbol;
+  const pre = currency === 'KRW' ? '₩' : '$';
+  const dec = currency === 'KRW' ? 0 : 2;
+  document.getElementById('sltp-current-price').textContent = pre + fmt(currentPrice, dec);
+  document.getElementById('sltp-held').textContent = fmt(availableQty, market === 'KR' ? 0 : 4) + t('shares_unit');
+  document.querySelectorAll('.sltp-cur-prefix').forEach(el => el.textContent = pre);
+  document.getElementById('sltp-qty').value  = '';
+  document.getElementById('sltp-qty').max    = availableQty;
+  document.getElementById('sl-price').value  = '';
+  document.getElementById('tp-price').value  = '';
+  document.getElementById('oco-notice-ko').style.display = lang === 'ko' ? '' : 'none';
+  document.getElementById('oco-notice-en').style.display = lang === 'en' ? '' : 'none';
+  new bootstrap.Modal(document.getElementById('slTpModal')).show();
+}
+
+async function submitSlTp() {
+  const { symbol, market } = _sltpState;
+  const qty     = parseFloat(document.getElementById('sltp-qty').value);
+  const slPrice = parseFloat(document.getElementById('sl-price').value) || null;
+  const tpPrice = parseFloat(document.getElementById('tp-price').value) || null;
+
+  if (!qty || qty <= 0) { showToast(t('err_qty'), 'error'); return; }
+  if (!slPrice || !tpPrice) { showToast(t('err_sltp_empty'), 'error'); return; }
+
+  const modalEl = document.getElementById('slTpModal');
+  const btn = modalEl.querySelector('.btn-warning');
+  btn.disabled = true;
+
+  try {
+    await api('/api/order/oco', 'POST', {
+      symbol, market, quantity: qty,
+      sl_price: slPrice, tp_price: tpPrice
+    });
+    bootstrap.Modal.getInstance(modalEl)?.hide();
+    _pendingInitialized = false;
+    showToast(t('oco_set_ok'), 'success');
+    loadPortfolio();
+  } catch (e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function checkPendingOrders() {
+  if (!authToken) return;
+  try {
+    const orders     = await api('/api/orders/pending');
+    const currentMap = new Map(orders.map(o => [o.id, o]));
+    if (_pendingInitialized) {
+      let anyFill = false;
+      _knownPendingMap.forEach((order, id) => {
+        if (!currentMap.has(id)) {
+          anyFill = true;
+          const tt  = order.trigger_type;
+          const isOco = !!order.oco_group_id;
+          if (tt === 'STOP_LOSS') {
+            showToast(t('sl_triggered') + order.ticker + (isOco ? ` — ${t('oco_sibling_cancelled')}` : ''), 'warning');
+          } else if (tt === 'TAKE_PROFIT') {
+            showToast(t('tp_triggered') + order.ticker + (isOco ? ` — ${t('oco_sibling_cancelled')}` : ''), 'success');
+          } else {
+            showToast(t('order_filled_notify'), 'success');
+          }
+        }
+      });
+      if (anyFill) loadPortfolio();
+    }
+    _knownPendingMap    = currentMap;
+    _pendingInitialized = true;
+    // Keep Open Orders table in sync if portfolio tab is visible
+    const pfTab = document.getElementById('tab-portfolio');
+    if (pfTab && pfTab.style.display !== 'none') renderPendingOrders(orders);
+  } catch {}
+}
+
+async function checkDividends() {
+  if (!authToken) return;
+  try {
+    const entries = await api('/api/dividends/pending');
+    if (!entries.length) return;
+    entries.forEach(d => {
+      const pre  = d.currency === 'KRW' ? '₩' : '$';
+      const dec  = d.currency === 'KRW' ? 0 : 2;
+      const perShare = `${pre}${fmt(d.amount, dec)}`;
+      const total    = `${pre}${fmt(d.total, dec)}`;
+      showToast(`💵 ${d.symbol} (${d.name}) ${t('action_dividend')}: ${perShare}/주 × ${fmt(d.quantity, 0)}주 = ${total}`, 'success');
+    });
+    // Refresh dividend totals in portfolio if tab is visible
+    const pfTab = document.getElementById('tab-portfolio');
+    if (pfTab && pfTab.style.display !== 'none') loadPortfolio();
+  } catch {}
+}
+
+// ══════════════════════════════════════════════
+// Portfolio
+// ══════════════════════════════════════════════
+async function loadPortfolio() {
+  const tbody = document.getElementById('pf-tbody');
+  tbody.innerHTML = `<tr><td colspan="10" class="empty-state"><div class="spinner-border me-2"></div>${t('loading')}</td></tr>`;
+  try {
+    const [res, pending, divTotals] = await Promise.all([
+      api('/api/portfolio/live'),
+      api('/api/orders/pending').catch(() => []),
+      api('/api/dividends/total').catch(() => ({})),
+    ]);
+    // Dividend summary cards
+    const divRow = document.getElementById('pf-div-row');
+    const divKrw = (divTotals.KRW || 0);
+    const divUsd = (divTotals.USD || 0);
+    if (divKrw > 0 || divUsd > 0) {
+      document.getElementById('pf-div-krw').textContent = fmt(divKrw, 0);
+      document.getElementById('pf-div-usd').textContent = fmt(divUsd, 2);
+      if (divRow) divRow.style.display = '';
+    }
+    const bals = res.balances || {};
+    document.getElementById('pf-krw').textContent = fmt(bals.KRW || 0, 0);
+    document.getElementById('pf-usd').textContent = fmt(bals.USD || 0, 2);
+    if (res.fee_tier) updateFeeTierDisplay(res.fee_tier);
+    let plKrw = 0, plUsd = 0;
+    res.holdings.forEach(h => { h.currency === 'KRW' ? (plKrw += h.pl) : (plUsd += h.pl); });
+    const pkEl = document.getElementById('pf-pl-krw');
+    const puEl = document.getElementById('pf-pl-usd');
+    pkEl.textContent = `₩${fmt(plKrw, 0)}`; pkEl.className = `fw-bold fs-5 ${plKrw > 0 ? 'kr-up' : plKrw < 0 ? 'kr-down' : ''}`;
+    puEl.textContent = `$${fmt(plUsd, 2)}`; puEl.className = `fw-bold fs-5 ${plUsd > 0 ? 'kr-up' : plUsd < 0 ? 'kr-down' : ''}`;
+    if (!res.holdings.length) {
+      tbody.innerHTML = `<tr><td colspan="10" class="empty-state">${t('no_holdings')}</td></tr>`;
+      renderPendingOrders(pending); return;
+    }
+
+    // Index SL/TP orders by ticker
+    const slTpBySymbol = {};
+    pending.forEach(o => {
+      if (o.trigger_type === 'STOP_LOSS' || o.trigger_type === 'TAKE_PROFIT') {
+        (slTpBySymbol[o.ticker] = slTpBySymbol[o.ticker] || []).push(o);
+      }
+    });
+
+    const rows = [];
+    res.holdings.forEach(h => {
+      const pre      = h.currency === 'KRW' ? '₩' : '$';
+      const dec      = h.currency === 'KRW' ? 0 : 2;
+      const priceDir = h.current_price > h.avg_price ? 'kr-up' : h.current_price < h.avg_price ? 'kr-down' : '';
+      const plCls    = h.pl > 0 ? 'kr-up' : h.pl < 0 ? 'kr-down' : '';
+      const plSign   = h.pl > 0 ? '+' : h.pl < 0 ? '-' : '';
+      const pctSign  = h.pl_pct > 0 ? '+' : '';
+      rows.push(`<tr>
+        <td><strong class="holding-link" onclick="navigateToStock('${h.symbol}','${h.market}')" style="cursor:pointer;color:var(--accent);">${h.symbol}</strong></td>
+        <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;" onclick="navigateToStock('${h.symbol}','${h.market}')">${h.name}</td>
+        <td><span class="badge ${h.market==='KR'?'bg-primary':h.market==='CRYPTO'?'bg-warning text-dark':'bg-danger'}">${h.market}</span></td>
+        <td class="text-end">${fmt(h.quantity, h.market==='KR'?0:4)}</td>
+        <td class="text-end">${pre}${fmt(h.avg_price, dec)}</td>
+        <td class="text-end ${priceDir}">${pre}${fmt(h.current_price, dec)}</td>
+        <td class="text-end">${pre}${fmt(h.current_price * h.quantity, dec)}</td>
+        <td class="text-end ${plCls}">${plSign}${pre}${fmt(Math.abs(h.pl), dec)}</td>
+        <td class="text-end ${plCls}">${pctSign}${fmt(h.pl_pct, 2)}%</td>
+        <td class="text-center">
+          <button class="btn btn-sm btn-outline-warning py-0 px-2" style="font-size:.75rem;"
+            onclick="openSlTpModal('${h.symbol}','${h.market}',${h.quantity},${h.current_price},'${h.currency}')">
+            OCO
+          </button>
+        </td>
+      </tr>`);
+
+      // OCO sub-row for active orders on this holding
+      const orders = slTpBySymbol[h.symbol] || [];
+      if (orders.length) {
+        // Group by oco_group_id; ungrouped orders (null) rendered individually
+        const ocoGroups = {};
+        const standalone = [];
+        orders.forEach(o => {
+          if (o.oco_group_id) {
+            (ocoGroups[o.oco_group_id] = ocoGroups[o.oco_group_id] || []).push(o);
+          } else {
+            standalone.push(o);
+          }
+        });
+
+        const renderSingle = o => {
+          const isSl = o.trigger_type === 'STOP_LOSS';
+          return `<span class="me-3 d-inline-flex align-items-center gap-1">
+            <span class="badge ${isSl ? 'bg-danger' : 'bg-success'}">${isSl ? 'SL' : 'TP'}</span>
+            <span>${pre}${fmt(o.limit_price, dec)}</span>
+            <span class="text-secondary">(${fmt(o.quantity, h.market==='KR'?0:4)}${t('shares_unit')})</span>
+            <button class="btn btn-link p-0 text-danger" style="font-size:.8rem; line-height:1;"
+              onclick="cancelOrder(${o.id})">✕</button>
+          </span>`;
+        };
+
+        const parts = [];
+        // OCO groups: show both legs linked, single cancel button for the group
+        Object.values(ocoGroups).forEach(pair => {
+          const sl = pair.find(o => o.trigger_type === 'STOP_LOSS');
+          const tp = pair.find(o => o.trigger_type === 'TAKE_PROFIT');
+          const cancelIds = pair.map(o => o.id);
+          parts.push(`<span class="me-3 d-inline-flex align-items-center gap-1" style="background:rgba(255,193,7,.08);border-radius:6px;padding:2px 6px;">
+            <i class="bi bi-link-45deg text-warning" title="OCO"></i>
+            ${tp ? `<span class="badge bg-success">TP</span><span>${pre}${fmt(tp.limit_price, dec)}</span>` : ''}
+            <span class="text-secondary mx-1">|</span>
+            ${sl ? `<span class="badge bg-danger">SL</span><span>${pre}${fmt(sl.limit_price, dec)}</span>` : ''}
+            <span class="text-secondary ms-1">(${fmt(pair[0].quantity, h.market==='KR'?0:4)}${t('shares_unit')})</span>
+            <button class="btn btn-link p-0 text-danger" style="font-size:.8rem; line-height:1;"
+              onclick="cancelOcoGroup([${cancelIds.join(',')}])">✕</button>
+          </span>`);
+        });
+        standalone.forEach(o => parts.push(renderSingle(o)));
+
+        const badges = parts.join('');
+        rows.push(`<tr style="background:rgba(255,193,7,.05);">
+          <td colspan="10" style="padding:.35rem 1rem; font-size:.78rem; border-top:none;">${badges}</td>
+        </tr>`);
+      }
+    });
+    tbody.innerHTML = rows.join('');
+    renderPendingOrders(pending);
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="10" class="empty-state text-danger">${e.message}</td></tr>`;
+  }
+}
+
+// ══════════════════════════════════════════════
+// History
+// ══════════════════════════════════════════════
+async function loadHistory() {
+  const tbody = document.getElementById('hist-tbody');
+  tbody.innerHTML = `<tr><td colspan="11" class="empty-state"><div class="spinner-border me-2"></div>${t('loading')}</td></tr>`;
+  try {
+    const rows   = await api('/api/transactions');
+    const locale = lang === 'ko' ? 'ko-KR' : 'en-US';
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="11" class="empty-state">${t('no_history')}</td></tr>`; return;
+    }
+    tbody.innerHTML = rows.map(r => {
+      const pre  = r.currency === 'KRW' ? '₩' : '$';
+      const fdec = r.currency === 'KRW' ? 0 : 4;
+      const act  = r.action === 'buy'
+        ? `<span class="badge bg-success">${t('action_buy')}</span>`
+        : r.action === 'sell'
+        ? `<span class="badge bg-danger">${t('action_sell')}</span>`
+        : r.action === 'short_open'
+        ? `<span class="badge" style="background:#fd7e14;">${t('action_short_open')}</span>`
+        : r.action === 'short_close'
+        ? `<span class="badge bg-secondary">${t('action_short_close')}</span>`
+        : r.action === 'short_margin_call'
+        ? `<span class="badge bg-danger">${t('action_short_margin')}</span>`
+        : r.action === 'lev_open'
+        ? `<span class="badge bg-success">${t('action_lev_open')}</span>`
+        : r.action === 'lev_close'
+        ? `<span class="badge bg-secondary">${t('action_lev_close')}</span>`
+        : r.action === 'lev_liquidated'
+        ? `<span class="badge bg-danger">${t('action_lev_liquidated')}</span>`
+        : r.action === 'DIVIDEND'
+        ? `<span class="badge bg-success">${t('action_dividend')}</span>`
+        : `<span class="badge bg-warning text-dark">${t('action_exchange')}</span>`;
+      const dt = new Date(r.timestamp).toLocaleString(locale, {
+        month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit',
+      });
+      const slipVal = r.slippage_amount || 0;
+      const feeVal  = (r.fee_amount || 0) + (r.fee || 0);
+      const taxVal  = r.tax_amount || 0;
+      const secVal  = r.sec_fee || 0;
+      const slipStr = slipVal > 0
+        ? `<span style="color:#0dcaf0;">${pre}${fmt(slipVal, fdec)}</span>`
+        : `<span class="text-secondary">—</span>`;
+      let feeStr;
+      if (feeVal > 0 || secVal > 0) {
+        const totalFeeDisplay = feeVal + secVal;
+        const tooltip = secVal > 0
+          ? ` title="${t('order_fee')}: $${fmt(feeVal, 4)}\n${t('order_sec_fee')}: $${fmt(secVal, 2)}"`
+          : '';
+        feeStr = `<span class="text-warning"${tooltip}>${pre}${fmt(totalFeeDisplay, fdec)}</span>`;
+      } else {
+        feeStr = `<span class="text-secondary">—</span>`;
+      }
+      const taxStr = taxVal > 0
+        ? `<span class="text-warning">${pre}${fmt(taxVal, fdec)}</span>`
+        : `<span class="text-secondary">—</span>`;
+      return `<tr>
+        <td class="text-secondary" style="white-space:nowrap;">${dt}</td>
+        <td><strong>${r.symbol}</strong></td>
+        <td><span class="badge ${r.market==='KR'?'bg-primary':r.market==='CRYPTO'?'bg-warning text-dark':'bg-danger'}">${r.market}</span></td>
+        <td>${act}</td>
+        <td class="text-end">${fmt(r.quantity, r.market==='KR'?0:4)}</td>
+        <td class="text-end">${pre}${fmt(r.price, r.currency==='KRW'?0:2)}</td>
+        <td class="text-end fw-semibold">${pre}${fmt(r.total, r.currency==='KRW'?0:2)}</td>
+        <td class="text-end">${slipStr}</td>
+        <td class="text-end">${feeStr}</td>
+        <td class="text-end">${taxStr}</td>
+        <td>${r.currency}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="11" class="empty-state text-danger">${e.message}</td></tr>`;
+  }
+}
+
+// ══════════════════════════════════════════════
+// Top Movers
+// ══════════════════════════════════════════════
+let _moversMarket    = 'KRX';
+let _moversDirection = 'up';
+let _moversTimer     = null;
+
+function setMoversMarket(m, el) {
+  _moversMarket = m;
+  document.querySelectorAll('#movers-market-group .btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  loadMovers(true);
+}
+
+function setMoversDir(d, el) {
+  _moversDirection = d;
+  document.querySelectorAll('#movers-dir-group .btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  loadMovers(true);
+}
+
+async function loadMovers(force) {
+  const wrap = document.getElementById('movers-table-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = Array(5).fill('<div class="movers-skeleton"></div>').join('');
+  const footer = document.getElementById('movers-footer');
+  if (footer) footer.style.setProperty('display','none','important');
+
+  // Set up auto-refresh
+  if (_moversTimer) clearInterval(_moversTimer);
+  _moversTimer = setInterval(() => loadMovers(false), 5 * 60 * 1000);
+
+  try {
+    const res    = await api(`/api/movers?market=${_moversMarket}&direction=${_moversDirection}`);
+    const items  = res.items || [];
+    const isKRW  = res.market === 'KRX';
+    const pre    = isKRW ? '₩' : '$';
+    const pdec   = isKRW ? 0 : 2;
+    const locale = lang === 'ko' ? 'ko-KR' : 'en-US';
+    const mkt    = res.market === 'KRX' ? 'KR' : 'US';
+    const isVol  = _moversDirection === 'volume';
+
+    if (!items.length) {
+      const emptyMsg = lang === 'ko' ? '데이터가 없습니다.' : 'No data available.';
+      wrap.innerHTML = `
+        <div class="empty-state text-center py-4">
+          <div class="mb-2">${emptyMsg}</div>
+        </div>`;
+    } else {
+      wrap.innerHTML = `
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0" style="font-size:.85rem;">
+            <thead><tr>
+              <th class="text-center" style="width:36px;">${t('movers_col_rank')}</th>
+              <th>${t('movers_col_name')}</th>
+              <th class="text-end">${t('movers_col_price')}</th>
+              <th class="text-end">${t('movers_col_high')}</th>
+              <th class="text-end">${t('movers_col_low')}</th>
+              <th class="text-end">${t('movers_col_change')}</th>
+              <th class="text-end">${t('movers_col_volume')}</th>
+              <th class="text-end">${t('movers_col_time')}</th>
+            </tr></thead>
+            <tbody>
+              ${items.map((s, i) => {
+                const chgCls  = s.change_pct > 0 ? 'kr-up' : s.change_pct < 0 ? 'kr-down' : '';
+                const chgSign = s.change_pct > 0 ? '+' : '';
+                const hiStr   = s.high  != null ? `${pre}${fmt(s.high,  pdec)}` : '—';
+                const loStr   = s.low   != null ? `${pre}${fmt(s.low,   pdec)}` : '—';
+                return `<tr class="movers-row-link" onclick="navigateToStock('${s.ticker}','${mkt}')">
+                  <td class="text-center text-secondary">${i + 1}</td>
+                  <td>
+                    <div style="max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${s.name}</div>
+                    <small class="text-secondary" style="font-size:.75rem;">${s.ticker}</small>
+                  </td>
+                  <td class="text-end">${pre}${fmt(s.price, pdec)}</td>
+                  <td class="text-end text-secondary" style="font-size:.8rem;">${hiStr}</td>
+                  <td class="text-end text-secondary" style="font-size:.8rem;">${loStr}</td>
+                  <td class="text-end fw-bold ${chgCls}">${chgSign}${fmt(s.change_pct, 2)}%</td>
+                  <td class="text-end text-secondary">${Number(s.volume).toLocaleString(locale)}</td>
+                  <td class="text-end text-secondary" style="font-size:.8rem;">${s.time || '—'}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    if (footer) {
+      const updEl = document.getElementById('movers-updated');
+      const now   = new Date().toLocaleTimeString(locale, {hour:'2-digit', minute:'2-digit'});
+      if (updEl) updEl.textContent = `${t('movers_updated')}: ${now}`;
+      footer.style.display = 'block';
+    }
+  } catch (e) {
+    wrap.innerHTML = `<div class="empty-state text-danger">${e.message}</div>`;
+  }
+}
+
+
+// ══════════════════════════════════════════════
+// News
+// ══════════════════════════════════════════════
+let _newsRefreshTimer = null;
+
+function loadNews() {
+  loadGeneralNews(false);
+  loadHoldingsNews(false);
+  // Auto-refresh news every 30 minutes
+  if (_newsRefreshTimer) clearInterval(_newsRefreshTimer);
+  _newsRefreshTimer = setInterval(() => {
+    loadGeneralNews(false);
+    loadHoldingsNews(false);
+  }, 30 * 60 * 1000);
+}
+
+function _relativeTime(isoStr) {
+  if (!isoStr) return '';
+  try {
+    const diff = (Date.now() - new Date(isoStr).getTime()) / 1000;
+    if (diff < 60)           return lang === 'ko' ? '방금 전' : 'just now';
+    if (diff < 3600)         return lang === 'ko' ? `${Math.floor(diff/60)}분 전`  : `${Math.floor(diff/60)}m ago`;
+    if (diff < 86400)        return lang === 'ko' ? `${Math.floor(diff/3600)}시간 전` : `${Math.floor(diff/3600)}h ago`;
+    if (diff < 86400 * 30)   return lang === 'ko' ? `${Math.floor(diff/86400)}일 전`   : `${Math.floor(diff/86400)}d ago`;
+    return new Date(isoStr).toLocaleDateString();
+  } catch { return ''; }
+}
+
+function _renderNewsCard(a) {
+  const tickerBadge = a.ticker
+    ? `<span class="badge bg-secondary me-1" style="font-size:.68rem;">${a.ticker}</span>`
+    : '';
+  const rel = _relativeTime(a.published_at);
+  return `<div class="news-card">
+    <div>${tickerBadge}<a href="${a.link}" target="_blank" rel="noopener">${a.title}</a></div>
+    <div class="news-meta">
+      <span class="me-2"><i class="bi bi-building me-1"></i>${a.source}</span>
+      ${rel ? `<span><i class="bi bi-clock me-1"></i>${rel}</span>` : ''}
+    </div>
+  </div>`;
+}
+
+async function loadGeneralNews(force) {
+  const el = document.getElementById('news-general-list');
+  if (!el) return;
+  el.innerHTML = '<div class="news-skeleton"></div><div class="news-skeleton"></div><div class="news-skeleton"></div>';
+  try {
+    const res = await api('/api/news/general');
+    const articles = res.articles || [];
+    if (!articles.length) {
+      el.innerHTML = `<div class="empty-state">${t('news_no_articles')}</div>`; return;
+    }
+    el.innerHTML = articles.map(_renderNewsCard).join('');
+  } catch (e) {
+    el.innerHTML = `<div class="empty-state text-danger">${e.message}</div>`;
+  }
+}
+
+async function loadHoldingsNews(force) {
+  if (!authToken) return;
+  const el = document.getElementById('news-holdings-list');
+  if (!el) return;
+  el.innerHTML = '<div class="news-skeleton"></div><div class="news-skeleton"></div><div class="news-skeleton"></div>';
+  try {
+    const res = await api('/api/news/holdings');
+    const articles = res.articles || [];
+    if (!articles.length) {
+      el.innerHTML = `<div class="empty-state">${t('news_no_holdings')}</div>`; return;
+    }
+    el.innerHTML = articles.map(_renderNewsCard).join('');
+  } catch (e) {
+    el.innerHTML = `<div class="empty-state text-danger">${e.message}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════
+// Utility
+// ══════════════════════════════════════════════
+function fmt(n, decimals = 2) {
+  if (n == null) return '—';
+  return Number(n).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+// 입력 중 실시간 콤마 포맷 (정수 필드용)
+function fmtNumInput(el) {
+  const pos   = el.selectionStart;
+  const prev  = el.value.length;
+  const raw   = el.value.replace(/[^0-9]/g, '');
+  el.value    = raw ? Number(raw).toLocaleString('en-US') : '';
+  // 커서 위치 보정
+  const diff  = el.value.length - prev;
+  el.setSelectionRange(pos + diff, pos + diff);
+}
+
+// 쉼표 제거 후 숫자 파싱
+function parseNum(id) {
+  return parseFloat(document.getElementById(id).value.replace(/,/g, '')) || 0;
+}
+
+// ══════════════════════════════════════════════
+// Exchange
+// ══════════════════════════════════════════════
+// ── Order fee constants (mirrors main.py) ──────────────
+const ORDER_FEE = { KR: 0.00015, US: 0.0025, CRYPTO: 0.001 };  // Bronze baseline (overridden by currentFeeRates)
+const KRX_SELL_TAX = 0.0018;
+const SEC_FEE_PER_DOLLAR = 0.0000278;  // $27.80 per $1M proceeds (2024 rate)
+const FEE_TIERS_JS = [
+  { name: 'Bronze',   min_vol:       0, us_fee: 0.0025,  kr_fee: 0.00015 },
+  { name: 'Silver',   min_vol:  10000,  us_fee: 0.0020,  kr_fee: 0.00012 },
+  { name: 'Gold',     min_vol:  50000,  us_fee: 0.0015,  kr_fee: 0.00010 },
+  { name: 'Platinum', min_vol: 200000,  us_fee: 0.0010,  kr_fee: 0.00008 },
+];
+
+function getMaxSlippagePct(orderValueUsd, market) {
+  let pct;
+  if      (orderValueUsd < 500)    pct = 0;
+  else if (orderValueUsd < 5000)   pct = 0.0005;
+  else if (orderValueUsd < 50000)  pct = 0.001;
+  else                             pct = 0.002;
+  if (market === 'CRYPTO') pct *= 2;
+  return pct;
+}
+
+let fxRate = null;
+let fxDir  = 'KRW_TO_USD';
+let fxModal = null;
+const FX_SPREAD_FEE = 0.0175;
+
+async function openExchange(presetDir) {
+  if (!fxModal) fxModal = new bootstrap.Modal(document.getElementById('exchangeModal'));
+  fxDir = presetDir || 'KRW_TO_USD';
+  document.getElementById('fx-from-input').value = '';
+  document.getElementById('fx-breakdown').style.display = 'none';
+  setFxDir(fxDir);
+  fxModal.show();
+
+  // Fetch rate
+  document.getElementById('fx-rate-display').textContent = '…';
+  try {
+    const res = await api('/api/exchange/rate');
+    fxRate = res.rate;
+    document.getElementById('fx-rate-display').textContent = res.display;
+    updateFxBalLabel();
+  } catch (e) {
+    document.getElementById('fx-rate-display').textContent = '—';
+  }
+}
+
+function setFxDir(dir) {
+  fxDir = dir;
+  const isKU = dir === 'KRW_TO_USD';
+  document.getElementById('fx-btn-krw-usd').classList.toggle('active', isKU);
+  document.getElementById('fx-btn-usd-krw').classList.toggle('active', !isKU);
+  document.getElementById('fx-from-label').textContent  = t(isKU ? 'fx_from_krw' : 'fx_from_usd');
+  document.getElementById('fx-from-prefix').textContent = isKU ? '₩' : '$';
+  document.getElementById('fx-to-label').textContent    = t(isKU ? 'fx_to_usd' : 'fx_to_krw');
+  document.getElementById('fx-from-input').value = '';
+  document.getElementById('fx-breakdown').style.display = 'none';
+  updateFxBalLabel();
+}
+
+function updateFxBalLabel() {
+  const isKU  = fxDir === 'KRW_TO_USD';
+  const cur   = isKU ? 'KRW' : 'USD';
+  const pre   = isKU ? '₩' : '$';
+  const dec   = isKU ? 0 : 2;
+  const bal   = balances[cur] || 0;
+  document.getElementById('fx-from-bal').textContent = `${t('available')}: ${pre}${fmt(bal, dec)}`;
+}
+
+function updateFxPreview() {
+  if (!fxRate) return;
+  const raw = parseNum('fx-from-input');
+  if (!raw) { document.getElementById('fx-breakdown').style.display = 'none'; return; }
+  const isKU        = fxDir === 'KRW_TO_USD';
+  const appliedRate = fxRate * (1 - FX_SPREAD_FEE);
+  const result      = isKU ? raw / appliedRate : raw * appliedRate;
+  const dec         = isKU ? 6 : 0;
+
+  document.getElementById('fx-mid-display').textContent     = `1 USD = ₩${fmt(fxRate, 2)}`;
+  document.getElementById('fx-fee-pct').textContent         = `${(FX_SPREAD_FEE * 100).toFixed(2)}%`;
+  document.getElementById('fx-applied-display').textContent = `1 USD = ₩${fmt(appliedRate, 2)}`;
+  document.getElementById('fx-to-preview').textContent      = `${isKU ? '$' : '₩'}${fmt(result, dec)}`;
+  document.getElementById('fx-breakdown').style.display     = '';
+}
+
+function setFxMax() {
+  const isKU = fxDir === 'KRW_TO_USD';
+  const bal  = balances[isKU ? 'KRW' : 'USD'] || 0;
+  const dec  = isKU ? 0 : 2;
+  document.getElementById('fx-from-input').value = fmt(bal, dec);
+  updateFxPreview();
+}
+
+async function doExchange() {
+  const amount = parseNum('fx-from-input');
+  if (!amount || amount <= 0) { showToast(t('err_amt'), 'error'); return; }
+
+  const btn = document.getElementById('fx-submit-btn');
+  btn.disabled = true; btn.textContent = t('exchange_processing');
+  try {
+    const res = await api('/api/exchange', 'POST', { direction: fxDir, amount });
+    const isKU = fxDir === 'KRW_TO_USD';
+    const msg  = isKU
+      ? `₩${fmt(res.from_amount,0)} → $${fmt(res.to_amount,4)}`
+      : `$${fmt(res.from_amount,4)} → ₩${fmt(res.to_amount,0)}`;
+    showToast(msg, 'success');
+    await refreshBalances();
+    updateFxBalLabel();
+    document.getElementById('fx-from-input').value = '';
+    document.getElementById('fx-breakdown').style.display = 'none';
+    if (currentPrice) updateOrderLabels({ price: currentPrice, currency: currentCurrency });
+  } catch (e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = t('exchange_confirm');
+  }
+}
+
+function showToast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = `toast-msg ${type}`;
+  el.innerHTML = `<i class="bi bi-${type==='success'?'check-circle':'exclamation-circle'} me-2"></i>${msg}`;
+  document.getElementById('toast-wrap').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+// ══════════════════════════════════════════════
+// Deposit
+// ══════════════════════════════════════════════
+let _depositCurrency = 'KRW';
+
+function openDepositModal() {
+  setDepositCurrency('KRW', document.querySelector('#deposit-currency-group .btn'));
+  document.getElementById('deposit-amount').value = '';
+  new bootstrap.Modal(document.getElementById('depositModal')).show();
+}
+
+function setDepositCurrency(cur, btn) {
+  _depositCurrency = cur;
+  document.querySelectorAll('#deposit-currency-group .btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('deposit-presets-krw').style.display = cur === 'KRW' ? '' : 'none';
+  document.getElementById('deposit-presets-usd').style.display = cur === 'USD' ? '' : 'none';
+}
+
+function addDepositAmount(n) {
+  const inp = document.getElementById('deposit-amount');
+  inp.value = (parseFloat(inp.value) || 0) + n;
+}
+
+async function confirmDeposit() {
+  const amount = parseFloat(document.getElementById('deposit-amount').value);
+  if (!amount || amount <= 0) { showToast(t('deposit_amount') + ' 오류', 'error'); return; }
+  const btn = document.getElementById('deposit-confirm-btn');
+  btn.disabled = true;
+  try {
+    const res = await api('/api/deposit', 'POST', { currency: _depositCurrency, amount });
+    bootstrap.Modal.getInstance(document.getElementById('depositModal')).hide();
+    showToast(`${_depositCurrency === 'KRW' ? '₩' : '$'}${fmt(amount, _depositCurrency === 'KRW' ? 0 : 2)} ${t('deposit_confirm')}`, 'success');
+    // Update balance display
+    document.getElementById('pf-krw').textContent = fmt(res.new_balance_krw, 0);
+    document.getElementById('pf-usd').textContent = fmt(res.new_balance_usd, 4);
+  } catch (e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ══════════════════════════════════════════════
+// P&L Analytics
+// ══════════════════════════════════════════════
+let _analyticsPeriod   = 'all';
+let _analyticsCurrency = 'KRW';
+let _analyticsData     = null;
+
+function setAnalyticsPeriod(period, btn) {
+  _analyticsPeriod = period;
+  document.querySelectorAll('#analytics-period-group .btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadAnalytics();
+}
+
+function setAnalyticsCurrency(cur, btn) {
+  _analyticsCurrency = cur;
+  document.querySelectorAll('#analytics-currency-group .btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (_analyticsData) renderAnalytics(_analyticsData);
+}
+
+async function loadAnalytics() {
+  try {
+    _analyticsData = await api(`/api/analytics?period=${_analyticsPeriod}`);
+    renderAnalytics(_analyticsData);
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+function renderAnalytics(d) {
+  const s      = d.summary;
+  const isUSD  = _analyticsCurrency === 'USD';
+  const sym    = isUSD ? '$' : '₩';
+  const dec    = isUSD ? 2 : 0;
+  const profit = isUSD ? s.total_profit_usd : s.total_profit_krw;
+  const loss   = isUSD ? s.total_loss_usd   : s.total_loss_krw;
+  const net    = isUSD ? s.net_usd          : s.net_krw;
+
+  document.getElementById('an-profit-sym').textContent = sym;
+  document.getElementById('an-loss-sym').textContent   = sym;
+  document.getElementById('an-profit').textContent = fmt(profit, dec);
+  document.getElementById('an-loss').textContent   = fmt(Math.abs(loss), dec);
+
+  const netEl = document.getElementById('an-net');
+  netEl.textContent = (net >= 0 ? sym : '-' + sym) + fmt(Math.abs(net), dec);
+  netEl.style.color = net >= 0 ? '#198754' : '#dc3545';
+  document.getElementById('an-winrate').textContent = s.win_rate;
+
+  const plStr = t => {
+    const val = isUSD ? t.pl_usd : t.pl_krw;
+    const clr = val >= 0 ? '#198754' : '#dc3545';
+    return `<span style="color:${clr}">${val < 0 ? '-' : ''}${sym}${fmt(Math.abs(val), dec)}</span>`;
+  };
+
+  const wbody = document.getElementById('an-winners-body');
+  wbody.innerHTML = d.winners.length
+    ? d.winners.map(t => `<tr><td>${t.symbol}</td><td>${t.category}</td><td class="text-end">${plStr(t)}</td></tr>`).join('')
+    : `<tr><td colspan="3" class="text-center text-secondary">—</td></tr>`;
+
+  const lbody = document.getElementById('an-losers-body');
+  lbody.innerHTML = d.losers.length
+    ? d.losers.map(t => `<tr><td>${t.symbol}</td><td>${t.category}</td><td class="text-end">${plStr(t)}</td></tr>`).join('')
+    : `<tr><td colspan="3" class="text-center text-secondary">—</td></tr>`;
+
+  const cbody = document.getElementById('an-cat-body');
+  cbody.innerHTML = d.by_category.length
+    ? d.by_category.map(c => {
+        const val = isUSD ? c.pl_usd : c.pl_krw;
+        const clr = val >= 0 ? '#198754' : '#dc3545';
+        return `<tr>
+          <td>${c.category}</td>
+          <td class="text-end">${c.trades}</td>
+          <td class="text-end">${c.win_rate}%</td>
+          <td class="text-end" style="color:${clr}">${val < 0 ? '-' : ''}${sym}${fmt(Math.abs(val), dec)}</td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="4" class="text-center text-secondary">—</td></tr>`;
+}
+
+// ══════════════════════════════════════════════
+// Boot
+// ══════════════════════════════════════════════
+setOrderAction('buy');
+setOrderMode('qty');
+init();
+</script>
+</body>
+</html>
