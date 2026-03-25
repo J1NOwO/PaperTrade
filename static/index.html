@@ -203,6 +203,10 @@
   /* ── Input error highlight ── */
   .input-error { border-color: var(--down) !important; }
 
+  /* ── Equity curve ── */
+  .eq-metric-label { font-size:.7rem; color:var(--tab-fg); margin-bottom:.1rem; }
+  .eq-metric-value { font-size:.92rem; font-weight:700; }
+
   /* ── Glossary ── */
   .glossary-search { background:var(--bg-card); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:.5rem .85rem; width:100%; font-size:.9rem; outline:none; }
   .glossary-search:focus { border-color:var(--accent); }
@@ -977,6 +981,31 @@
           <i class="bi bi-arrow-clockwise"></i>
         </button>
       </div>
+      <!-- Equity Curve -->
+      <div class="card p-3 mb-3">
+        <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+          <h6 class="fw-bold mb-0" data-i18n="equity_title"></h6>
+          <div class="d-flex gap-4">
+            <div class="text-center">
+              <div class="eq-metric-label" data-i18n="equity_return"></div>
+              <div class="eq-metric-value" id="eq-return">—</div>
+            </div>
+            <div class="text-center">
+              <div class="eq-metric-label" data-i18n="equity_peak"></div>
+              <div class="eq-metric-value" id="eq-peak">—</div>
+            </div>
+            <div class="text-center">
+              <div class="eq-metric-label" data-i18n="equity_mdd"></div>
+              <div class="eq-metric-value" id="eq-mdd" style="color:var(--down);">—</div>
+            </div>
+          </div>
+        </div>
+        <div style="position:relative; height:200px;">
+          <div id="equity-chart-empty" class="text-secondary text-center pt-5" style="font-size:.85rem;" data-i18n="equity_no_data"></div>
+          <div id="equity-chart-canvas" style="height:200px; display:none;"></div>
+        </div>
+      </div>
+
       <!-- Summary cards -->
       <div class="row g-3 mb-3" id="analytics-summary">
         <div class="col-6 col-md-3">
@@ -1424,6 +1453,11 @@ const LANG = {
     tab_glossary:    '용어사전',
     glossary_search_placeholder: '용어 검색...',
     glossary_example_label: '예시 상황',
+    equity_title:   'Equity Curve (자산 변화)',
+    equity_return:  '총 수익률',
+    equity_peak:    '최고 자산',
+    equity_mdd:     '최대 낙폭 (MDD)',
+    equity_no_data: '거래 내역이 없습니다.',
     deposit_btn:     '입금',
     deposit_title:   '가상 자금 입금',
     deposit_amount:  '금액',
@@ -1667,6 +1701,11 @@ const LANG = {
     tab_glossary:    'Glossary',
     glossary_search_placeholder: 'Search terms...',
     glossary_example_label: 'Example',
+    equity_title:   'Equity Curve',
+    equity_return:  'Total Return',
+    equity_peak:    'Peak Equity',
+    equity_mdd:     'Max Drawdown (MDD)',
+    equity_no_data: 'No trading history yet.',
     deposit_btn:     'Deposit',
     deposit_title:   'Add Virtual Funds',
     deposit_amount:  'Amount',
@@ -4461,9 +4500,79 @@ async function loadAnalytics() {
   try {
     _analyticsData = await api(`/api/analytics?period=${_analyticsPeriod}`);
     renderAnalytics(_analyticsData);
+    loadEquity();
   } catch (e) {
     showToast(e.message, 'error');
   }
+}
+
+let _equityChart = null;
+
+async function loadEquity() {
+  try {
+    const data = await api('/api/analytics/equity');
+    renderEquityChart(data);
+  } catch (e) { /* silent */ }
+}
+
+function renderEquityChart(data) {
+  const canvasEl = document.getElementById('equity-chart-canvas');
+  const emptyEl  = document.getElementById('equity-chart-empty');
+  const retEl    = document.getElementById('eq-return');
+  const peakEl   = document.getElementById('eq-peak');
+  const mddEl    = document.getElementById('eq-mdd');
+
+  if (!data.snapshots || data.snapshots.length < 2) {
+    canvasEl.style.display = 'none';
+    emptyEl.style.display  = 'block';
+    retEl.textContent = peakEl.textContent = mddEl.textContent = '—';
+    return;
+  }
+
+  canvasEl.style.display = 'block';
+  emptyEl.style.display  = 'none';
+
+  const retPct = data.return_pct;
+  retEl.textContent  = (retPct >= 0 ? '+' : '') + retPct.toFixed(2) + '%';
+  retEl.style.color  = retPct >= 0 ? 'var(--up)' : 'var(--down)';
+  peakEl.textContent = '₩' + fmt(data.peak_equity, 0);
+  mddEl.textContent  = data.mdd_pct > 0 ? '-' + data.mdd_pct.toFixed(2) + '%' : '0%';
+
+  if (_equityChart) { _equityChart.remove(); _equityChart = null; }
+  canvasEl.innerHTML = '';
+
+  const isDark = theme === 'dark';
+  _equityChart = LightweightCharts.createChart(canvasEl, {
+    width:  canvasEl.parentElement.offsetWidth,
+    height: 200,
+    layout: { background: { color: 'transparent' }, textColor: isDark ? '#8b949e' : '#6c757d' },
+    grid:   { vertLines: { color: isDark ? '#21262d' : '#e9ecef' }, horzLines: { color: isDark ? '#21262d' : '#e9ecef' } },
+    rightPriceScale: { borderVisible: false },
+    timeScale: { borderVisible: false, timeVisible: false },
+    crosshair: { mode: 1 },
+    handleScroll: false,
+    handleScale:  false,
+  });
+
+  const lineColor = retPct >= 0 ? '#26a69a' : '#ef5350';
+  const series = _equityChart.addAreaSeries({
+    lineColor,
+    topColor:    retPct >= 0 ? 'rgba(38,166,154,0.25)' : 'rgba(239,83,80,0.25)',
+    bottomColor: 'rgba(0,0,0,0)',
+    lineWidth: 2,
+    priceFormat: { type: 'price', precision: 0, minMove: 1 },
+  });
+
+  const seen = new Set();
+  const chartData = [];
+  for (const s of data.snapshots) {
+    let ts = Math.floor(new Date(s.time).getTime() / 1000);
+    while (seen.has(ts)) ts++;
+    seen.add(ts);
+    chartData.push({ time: ts, value: s.value });
+  }
+  series.setData(chartData);
+  _equityChart.timeScale().fitContent();
 }
 
 function renderAnalytics(d) {

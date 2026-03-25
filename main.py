@@ -798,6 +798,7 @@ def api_post_setup(req: SetupRequest, user_id: int = Depends(require_auth)):
         conn.execute(
             "INSERT OR REPLACE INTO balances VALUES (?, 'USD', ?)", (user_id, req.usd)
         )
+        _record_snapshot(user_id, conn)
     return {"success": True}
 
 
@@ -1028,6 +1029,7 @@ def api_order(req: OrderRequest, user_id: int = Depends(require_auth)):
             (user_id, symbol, market, action, qty, price, total, currency,
              datetime.now().isoformat(), fee_amount, tax_amount, slippage_amount, sec_fee),
         )
+        _record_snapshot(user_id, conn)
 
     label = "매수" if action == "buy" else "매도"
     return {
@@ -1401,6 +1403,7 @@ def api_exchange(req: ExchangeRequest, user_id: int = Depends(require_auth)):
                 " VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (user_id, "KRW/USD", "FX", "exchange", round(usd_in, 6), mid_rate, krw_out, "KRW", now, fee_amount),
             )
+            _record_snapshot(user_id, conn)
             return {
                 "success":       True,
                 "from_currency": "KRW", "from_amount": krw_out,
@@ -1429,6 +1432,7 @@ def api_exchange(req: ExchangeRequest, user_id: int = Depends(require_auth)):
                 " VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (user_id, "USD/KRW", "FX", "exchange", round(krw_in, 2), mid_rate, usd_out, "USD", now, fee_amount),
             )
+            _record_snapshot(user_id, conn)
             return {
                 "success":       True,
                 "from_currency": "USD", "from_amount": usd_out,
@@ -2458,6 +2462,7 @@ async def api_deposit(req: DepositRequest, user_id: int = Depends(require_auth))
             (user_id, "DEPOSIT", "DEPOSIT", "deposit", 0, 0, req.amount, req.currency,
              datetime.now().isoformat()),
         )
+        _record_snapshot(user_id, conn)
         conn.commit()
         new_krw = conn.execute(
             "SELECT amount FROM balances WHERE user_id = ? AND currency = 'KRW'", (user_id,)
@@ -2476,6 +2481,67 @@ async def api_deposit(req: DepositRequest, user_id: int = Depends(require_auth))
 # ─────────────────────────────────────────
 # P&L Analytics
 # ─────────────────────────────────────────
+
+def _record_snapshot(user_id: int, conn) -> None:
+    """Snapshot current portfolio equity (KRW equivalent) after each trade/deposit."""
+    try:
+        fx = get_exchange_rate()["usd_to_krw"]
+    except Exception:
+        fx = 1380.0
+    balances = conn.execute(
+        "SELECT currency, amount FROM balances WHERE user_id = ?", (user_id,)
+    ).fetchall()
+    cash_krw = sum(r["amount"] * (fx if r["currency"] == "USD" else 1.0) for r in balances)
+    holdings = conn.execute(
+        "SELECT avg_price, quantity, currency FROM holdings WHERE user_id = ? AND quantity > 0",
+        (user_id,),
+    ).fetchall()
+    holdings_krw = sum(
+        h["avg_price"] * h["quantity"] * (fx if h["currency"] == "USD" else 1.0)
+        for h in holdings
+    )
+    conn.execute(
+        "INSERT INTO portfolio_snapshots (user_id, timestamp, equity_krw) VALUES (?, ?, ?)",
+        (user_id, datetime.now().isoformat(), round(cash_krw + holdings_krw, 0)),
+    )
+
+
+@app.get("/api/analytics/equity")
+def api_analytics_equity(user_id: int = Depends(require_auth)):
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT timestamp, equity_krw FROM portfolio_snapshots WHERE user_id = ? ORDER BY timestamp",
+            (user_id,),
+        ).fetchall()
+    if not rows:
+        return {"snapshots": [], "mdd_pct": 0, "mdd_krw": 0,
+                "initial_equity": 0, "current_equity": 0, "peak_equity": 0, "return_pct": 0}
+    snapshots = [{"time": r["timestamp"], "value": r["equity_krw"]} for r in rows]
+    peak = snapshots[0]["value"]
+    max_dd_pct = 0.0
+    max_dd_krw = 0.0
+    for s in snapshots:
+        if s["value"] > peak:
+            peak = s["value"]
+        dd_krw = peak - s["value"]
+        dd_pct = dd_krw / peak * 100 if peak > 0 else 0
+        if dd_pct > max_dd_pct:
+            max_dd_pct = dd_pct
+            max_dd_krw = dd_krw
+    initial    = snapshots[0]["value"]
+    current    = snapshots[-1]["value"]
+    peak_eq    = max(s["value"] for s in snapshots)
+    return_pct = (current - initial) / initial * 100 if initial > 0 else 0
+    return {
+        "snapshots":      snapshots,
+        "mdd_pct":        round(max_dd_pct, 2),
+        "mdd_krw":        round(max_dd_krw, 0),
+        "initial_equity": round(initial, 0),
+        "current_equity": round(current, 0),
+        "peak_equity":    round(peak_eq, 0),
+        "return_pct":     round(return_pct, 2),
+    }
+
 
 @app.get("/api/analytics")
 async def api_analytics(period: str = "all", user_id: int = Depends(require_auth)):

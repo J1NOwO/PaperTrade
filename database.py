@@ -252,6 +252,14 @@ def _migrate(conn):
             oco_group_id    TEXT,
             FOREIGN KEY (user_id) REFERENCES users(id)
         );
+
+        CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id    INTEGER NOT NULL,
+            timestamp  TEXT    NOT NULL,
+            equity_krw REAL    NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
     """)
 
 
