@@ -1,5 +1,6 @@
 import random
 import re
+from collections import deque
 import secrets
 import sys
 import threading
@@ -616,6 +617,25 @@ def _upsert_dividend_check(ticker: str, ts: datetime):
         )
 
 
+def _daily_snapshot_loop():
+    """Record an equity snapshot for every user at local midnight each day."""
+    while True:
+        now = datetime.now()
+        next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        time.sleep((next_midnight - now).total_seconds())
+        try:
+            with get_db() as conn:
+                user_ids = [r[0] for r in conn.execute("SELECT id FROM users").fetchall()]
+            for uid in user_ids:
+                try:
+                    with get_db() as conn:
+                        _record_snapshot(uid, conn)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+
 def _dividend_loop():
     """Run check_dividends() once per day, shortly after both markets close."""
     import pytz
@@ -640,10 +660,11 @@ def _dividend_loop():
 @app.on_event("startup")
 def startup():
     init_db()
-    threading.Thread(target=_fill_loop,        daemon=True).start()
-    threading.Thread(target=_short_fee_loop,   daemon=True).start()
-    threading.Thread(target=_leverage_fee_loop, daemon=True).start()
-    threading.Thread(target=_dividend_loop,    daemon=True).start()
+    threading.Thread(target=_fill_loop,             daemon=True).start()
+    threading.Thread(target=_short_fee_loop,        daemon=True).start()
+    threading.Thread(target=_leverage_fee_loop,     daemon=True).start()
+    threading.Thread(target=_dividend_loop,         daemon=True).start()
+    threading.Thread(target=_daily_snapshot_loop,   daemon=True).start()
 
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -2488,83 +2509,121 @@ def _record_snapshot(user_id: int, conn) -> None:
         fx = get_exchange_rate()["usd_to_krw"]
     except Exception:
         fx = 1380.0
-    balances = conn.execute(
+    equity = _compute_actual_equity(user_id, conn, fx)
+    conn.execute(
+        "INSERT INTO portfolio_snapshots (user_id, timestamp, equity_krw) VALUES (?, ?, ?)",
+        (user_id, datetime.now().isoformat(), round(equity, 0)),
+    )
+
+
+def _compute_actual_equity(user_id: int, conn, fx: float) -> float:
+    """Current equity: cash + holdings (avg price) + leveraged equity (market - borrowed) + short equity (margin + PnL)."""
+    bal_rows = conn.execute(
         "SELECT currency, amount FROM balances WHERE user_id = ?", (user_id,)
     ).fetchall()
-    cash_krw = sum(r["amount"] * (fx if r["currency"] == "USD" else 1.0) for r in balances)
-    holdings = conn.execute(
+    cash_krw = sum(r["amount"] * (fx if r["currency"] == "USD" else 1.0) for r in bal_rows)
+
+    hold_rows = conn.execute(
         "SELECT avg_price, quantity, currency FROM holdings WHERE user_id = ? AND quantity > 0",
         (user_id,),
     ).fetchall()
-    holdings_krw = sum(
+    hold_krw = sum(
         h["avg_price"] * h["quantity"] * (fx if h["currency"] == "USD" else 1.0)
-        for h in holdings
+        for h in hold_rows
     )
-    conn.execute(
-        "INSERT INTO portfolio_snapshots (user_id, timestamp, equity_krw) VALUES (?, ?, ?)",
-        (user_id, datetime.now().isoformat(), round(cash_krw + holdings_krw, 0)),
-    )
+
+    # Leveraged positions: user equity = current_market_value - borrowed_amount
+    lev_rows = conn.execute(
+        "SELECT ticker, market, quantity, entry_price, borrowed_amount, margin_amount, currency "
+        "FROM leveraged_positions WHERE user_id=? AND status='OPEN'",
+        (user_id,),
+    ).fetchall()
+    lev_krw = 0.0
+    for lev in lev_rows:
+        try:
+            info = get_stock_info(lev["ticker"], lev["market"])
+            current_price = info["price"] if info else lev["entry_price"]
+        except Exception:
+            current_price = lev["entry_price"]
+        equity = lev["quantity"] * current_price - lev["borrowed_amount"]
+        lev_krw += equity * (fx if lev["currency"] == "USD" else 1.0)
+
+    # Short positions: user equity = margin + unrealized PnL = margin + (entry - current) * qty
+    short_rows = conn.execute(
+        "SELECT ticker, market, quantity, entry_price, margin_amount, currency "
+        "FROM short_positions WHERE user_id=? AND status='OPEN'",
+        (user_id,),
+    ).fetchall()
+    short_krw = 0.0
+    for sp in short_rows:
+        try:
+            info = get_stock_info(sp["ticker"], sp["market"])
+            current_price = info["price"] if info else sp["entry_price"]
+        except Exception:
+            current_price = sp["entry_price"]
+        unrealized_pnl = (sp["entry_price"] - current_price) * sp["quantity"]
+        equity = sp["margin_amount"] + unrealized_pnl
+        short_krw += equity * (fx if sp["currency"] == "USD" else 1.0)
+
+    return cash_krw + hold_krw + lev_krw + short_krw
 
 
 def _backfill_snapshots(user_id: int, conn) -> None:
-    """Reconstruct equity curve from transaction history for users with no snapshots yet."""
-    existing = conn.execute(
-        "SELECT COUNT(*) as n FROM portfolio_snapshots WHERE user_id = ?", (user_id,)
-    ).fetchone()["n"]
-    if existing > 0:
-        return
-    txns = conn.execute(
-        """SELECT action, symbol, quantity, price, total, currency, timestamp
-           FROM transactions WHERE user_id = ? ORDER BY timestamp""",
-        (user_id,),
-    ).fetchall()
-    if not txns:
-        return
+    """Seed equity curve with anchor points when no live snapshots exist yet.
+
+    The old per-transaction simulation was too error-prone for portfolios with
+    leveraged/short positions (borrowed amounts leaked into equity). We now simply
+    insert two anchor points — the first transaction timestamp and now — both at
+    actual current equity.  Live snapshots recorded by _record_snapshot() after
+    each trade will fill in the real history going forward.
+    """
     try:
         fx = get_exchange_rate()["usd_to_krw"]
     except Exception:
         fx = 1380.0
-    cash: dict = {"KRW": 0.0, "USD": 0.0}
-    holdings: dict = {}  # symbol -> {qty, avg_price, currency}
-    for txn in txns:
-        act, sym, qty, price, total, cur, ts = (
-            txn["action"], txn["symbol"], txn["quantity"],
-            txn["price"], txn["total"], txn["currency"], txn["timestamp"],
-        )
-        if act == "deposit":
-            cash[cur] = cash.get(cur, 0.0) + total
-        elif act in ("buy", "lev_open"):
-            cash[cur] = cash.get(cur, 0.0) - total
-            if sym in holdings:
-                old = holdings[sym]
-                nq = old["qty"] + qty
-                holdings[sym] = {"qty": nq, "avg_price": (old["avg_price"] * old["qty"] + price * qty) / nq, "currency": cur}
-            else:
-                holdings[sym] = {"qty": qty, "avg_price": price, "currency": cur}
-        elif act in ("sell", "lev_close", "lev_liquidated"):
-            cash[cur] = cash.get(cur, 0.0) + total
-            if sym in holdings:
-                holdings[sym]["qty"] = max(0.0, holdings[sym]["qty"] - qty)
-        elif act == "short_open":
-            cash[cur] = cash.get(cur, 0.0) - total
-        elif act == "short_close":
-            cash[cur] = cash.get(cur, 0.0) + total
-        elif act == "exchange":
-            if cur == "KRW":
-                cash["KRW"] = cash.get("KRW", 0.0) - total
-                cash["USD"] = cash.get("USD", 0.0) + qty
-            else:
-                cash["USD"] = cash.get("USD", 0.0) - total
-                cash["KRW"] = cash.get("KRW", 0.0) + qty
-        cash_krw = cash.get("KRW", 0.0) + cash.get("USD", 0.0) * fx
-        hold_krw = sum(
-            h["qty"] * h["avg_price"] * (fx if h["currency"] == "USD" else 1.0)
-            for h in holdings.values() if h["qty"] > 0
-        )
-        conn.execute(
-            "INSERT INTO portfolio_snapshots (user_id, timestamp, equity_krw) VALUES (?, ?, ?)",
-            (user_id, ts, round(cash_krw + hold_krw, 0)),
-        )
+
+    actual_equity = _compute_actual_equity(user_id, conn, fx)
+
+    # Force-clear any snapshots built by the old simulation (detectable by a
+    # suspiciously high peak — more than 3× current equity — or by a version flag).
+    ver_row = conn.execute(
+        "SELECT value FROM settings WHERE user_id=? AND key='equity_snap_ver'", (user_id,)
+    ).fetchone()
+    if ver_row and ver_row["value"] == "3":
+        # Already on current version — just check staleness
+        last_row = conn.execute(
+            "SELECT equity_krw FROM portfolio_snapshots WHERE user_id=? ORDER BY timestamp DESC LIMIT 1",
+            (user_id,),
+        ).fetchone()
+        if last_row:
+            if actual_equity <= 0 or abs(last_row["equity_krw"] - actual_equity) / actual_equity < 0.20:
+                return
+        else:
+            pass  # no snapshots — fall through to seed
+    # Wipe old/stale snapshots and mark version
+    conn.execute("DELETE FROM portfolio_snapshots WHERE user_id=?", (user_id,))
+    conn.execute(
+        "INSERT OR REPLACE INTO settings VALUES (?,?,?)", (user_id, "equity_snap_ver", "3")
+    )
+
+    first_tx = conn.execute(
+        "SELECT timestamp FROM transactions WHERE user_id=? ORDER BY timestamp ASC LIMIT 1",
+        (user_id,),
+    ).fetchone()
+    if not first_tx:
+        return
+
+    eq = round(actual_equity, 0)
+    # Anchor at first-ever transaction time
+    conn.execute(
+        "INSERT INTO portfolio_snapshots (user_id, timestamp, equity_krw) VALUES (?,?,?)",
+        (user_id, first_tx["timestamp"], eq),
+    )
+    # Anchor at now (will be followed by live snapshots from _record_snapshot)
+    conn.execute(
+        "INSERT INTO portfolio_snapshots (user_id, timestamp, equity_krw) VALUES (?,?,?)",
+        (user_id, datetime.now().isoformat(), eq),
+    )
 
 
 @app.get("/api/analytics/equity")
@@ -2575,10 +2634,18 @@ def api_analytics_equity(user_id: int = Depends(require_auth)):
             "SELECT timestamp, equity_krw FROM portfolio_snapshots WHERE user_id = ? ORDER BY timestamp",
             (user_id,),
         ).fetchall()
+        # Always compute live equity so the chart's right edge reflects current prices
+        try:
+            fx = get_exchange_rate()["usd_to_krw"]
+        except Exception:
+            fx = 1380.0
+        live_equity = round(_compute_actual_equity(user_id, conn, fx), 0)
     if not rows:
         return {"snapshots": [], "mdd_pct": 0, "mdd_krw": 0,
                 "initial_equity": 0, "current_equity": 0, "peak_equity": 0, "return_pct": 0}
     snapshots = [{"time": r["timestamp"], "value": r["equity_krw"]} for r in rows]
+    # Append live current equity as the final point (not stored in DB, computed fresh each call)
+    snapshots.append({"time": datetime.now().isoformat(), "value": live_equity})
     peak = snapshots[0]["value"]
     max_dd_pct = 0.0
     max_dd_krw = 0.0
@@ -2591,7 +2658,7 @@ def api_analytics_equity(user_id: int = Depends(require_auth)):
             max_dd_pct = dd_pct
             max_dd_krw = dd_krw
     initial    = snapshots[0]["value"]
-    current    = snapshots[-1]["value"]
+    current    = live_equity  # always live, not last stored snapshot
     peak_eq    = max(s["value"] for s in snapshots)
     return_pct = (current - initial) / initial * 100 if initial > 0 else 0
     return {
@@ -2602,6 +2669,7 @@ def api_analytics_equity(user_id: int = Depends(require_auth)):
         "current_equity": round(current, 0),
         "peak_equity":    round(peak_eq, 0),
         "return_pct":     round(return_pct, 2),
+        "equity_note":    "레버리지 차입금 제외, 실제 자기자본 기준",
     }
 
 

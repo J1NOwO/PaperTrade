@@ -185,6 +185,7 @@
 
   .spinner-border { width: 1.2rem; height: 1.2rem; }
   .empty-state { color: var(--empty-fg); padding: 2.5rem 0; text-align: center; }
+  .empty-state .spinner-border { --bs-spinner-vertical-align: middle; vertical-align: middle; }
   .news-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: .75rem 1rem; margin-bottom: .6rem; transition: border-color .15s; }
   .news-card:hover { border-color: var(--accent); }
   .news-card a { color: var(--tab-active-fg); text-decoration: none; font-weight: 500; font-size: .88rem; line-height: 1.35; }
@@ -1004,6 +1005,10 @@
           <div id="equity-chart-empty" class="text-secondary text-center pt-5" style="font-size:.85rem;" data-i18n="equity_no_data"></div>
           <div id="equity-chart-canvas" style="height:200px; display:none;"></div>
         </div>
+        <div id="mdd-chart-wrap" style="display:none; margin-top:8px;">
+          <h6 class="fw-bold mb-1" data-i18n="mdd_chart_label"></h6>
+          <div id="mdd-chart-canvas" style="height:80px;"></div>
+        </div>
       </div>
 
       <!-- Summary cards -->
@@ -1457,7 +1462,8 @@ const LANG = {
     equity_return:  '총 수익률',
     equity_peak:    '최고 자산',
     equity_mdd:     '최대 낙폭 (MDD)',
-    equity_no_data: '거래 내역이 없습니다.',
+    equity_no_data:   '거래 내역이 없습니다.',
+    mdd_chart_label:  '낙폭 (Drawdown %)',
     deposit_btn:     '입금',
     deposit_title:   '가상 자금 입금',
     deposit_amount:  '금액',
@@ -1705,7 +1711,8 @@ const LANG = {
     equity_return:  'Total Return',
     equity_peak:    'Peak Equity',
     equity_mdd:     'Max Drawdown (MDD)',
-    equity_no_data: 'No trading history yet.',
+    equity_no_data:   'No trading history yet.',
+    mdd_chart_label:  'Drawdown %',
     deposit_btn:     'Deposit',
     deposit_title:   'Add Virtual Funds',
     deposit_amount:  'Amount',
@@ -3347,7 +3354,7 @@ async function placeLimitOrder() {
 async function loadPendingOrders() {
   const tbody = document.getElementById('orders-tbody');
   if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="7" class="empty-state"><div class="spinner-border spinner-border-sm me-2"></div>${t('loading')}</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="7" class="empty-state"><span class="spinner-border spinner-border-sm me-2"></span>${t('loading')}</td></tr>`;
   try {
     const orders = await api('/api/orders/pending');
     renderPendingOrders(orders);
@@ -3536,7 +3543,7 @@ function updateLeverageInfo() {
 async function loadLeveragedPositions() {
   const tbody = document.getElementById('lev-tbody');
   if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="9" class="empty-state"><div class="spinner-border spinner-border-sm me-2"></div>${t('loading')}</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="9" class="empty-state"><span class="spinner-border spinner-border-sm me-2"></span>${t('loading')}</td></tr>`;
   try {
     const positions = await api('/api/leverage/positions');
     renderLeveragedPositions(positions);
@@ -3744,7 +3751,7 @@ async function confirmShortOrder() {
 async function loadShortPositions() {
   const tbody = document.getElementById('short-tbody');
   if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="8" class="empty-state"><div class="spinner-border spinner-border-sm me-2"></div>${t('loading')}</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="8" class="empty-state"><span class="spinner-border spinner-border-sm me-2"></span>${t('loading')}</td></tr>`;
   try {
     const positions = await api('/api/short/positions');
     renderShortPositions(positions);
@@ -3908,7 +3915,7 @@ async function checkDividends() {
 // ══════════════════════════════════════════════
 async function loadPortfolio() {
   const tbody = document.getElementById('pf-tbody');
-  tbody.innerHTML = `<tr><td colspan="10" class="empty-state"><div class="spinner-border me-2"></div>${t('loading')}</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="10" class="empty-state"><span class="spinner-border spinner-border-sm me-2"></span>${t('loading')}</td></tr>`;
   try {
     const [res, pending, divTotals] = await Promise.all([
       api('/api/portfolio/live'),
@@ -4034,7 +4041,7 @@ async function loadPortfolio() {
 // ══════════════════════════════════════════════
 async function loadHistory() {
   const tbody = document.getElementById('hist-tbody');
-  tbody.innerHTML = `<tr><td colspan="11" class="empty-state"><div class="spinner-border me-2"></div>${t('loading')}</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="11" class="empty-state"><span class="spinner-border spinner-border-sm me-2"></span>${t('loading')}</td></tr>`;
   try {
     const rows   = await api('/api/transactions');
     const locale = lang === 'ko' ? 'ko-KR' : 'en-US';
@@ -4494,6 +4501,7 @@ function setAnalyticsCurrency(cur, btn) {
   document.querySelectorAll('#analytics-currency-group .btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   if (_analyticsData) renderAnalytics(_analyticsData);
+  if (_equityData)    renderEquityChart(_equityData);
 }
 
 async function loadAnalytics() {
@@ -4507,10 +4515,18 @@ async function loadAnalytics() {
 }
 
 let _equityChart = null;
+let _mddChart = null;
+let _equityData = null;
+let _equityFx   = 1380;
 
 async function loadEquity() {
   try {
-    const data = await api('/api/analytics/equity');
+    const [data, fxData] = await Promise.all([
+      api('/api/analytics/equity'),
+      api('/api/exchange/rate'),
+    ]);
+    _equityFx   = fxData.usd_to_krw || 1380;
+    _equityData = data;
     renderEquityChart(data);
   } catch (e) { /* silent */ }
 }
@@ -4532,10 +4548,14 @@ function renderEquityChart(data) {
   canvasEl.style.display = 'block';
   emptyEl.style.display  = 'none';
 
+  const isUSD  = _analyticsCurrency === 'USD';
+  const toDisp = v => isUSD ? v / _equityFx : v;
+  const sym    = isUSD ? '$' : '₩';
+
   const retPct = data.return_pct;
   retEl.textContent  = (retPct >= 0 ? '+' : '') + retPct.toFixed(2) + '%';
   retEl.style.color  = retPct >= 0 ? 'var(--up)' : 'var(--down)';
-  peakEl.textContent = '₩' + fmt(data.peak_equity, 0);
+  peakEl.textContent = sym + Math.round(toDisp(data.peak_equity)).toLocaleString(isUSD ? 'en-US' : 'ko-KR');
   mddEl.textContent  = data.mdd_pct > 0 ? '-' + data.mdd_pct.toFixed(2) + '%' : '0%';
 
   if (_equityChart) { _equityChart.remove(); _equityChart = null; }
@@ -4552,6 +4572,9 @@ function renderEquityChart(data) {
     crosshair: { mode: 1 },
     handleScroll: false,
     handleScale:  false,
+    localization: { priceFormatter: v => isUSD
+      ? '$' + Math.round(v).toLocaleString('en-US')
+      : '₩' + Math.round(v).toLocaleString('en-US') },
   });
 
   const lineColor = retPct >= 0 ? '#26a69a' : '#ef5350';
@@ -4569,10 +4592,51 @@ function renderEquityChart(data) {
     let ts = Math.floor(new Date(s.time).getTime() / 1000);
     while (seen.has(ts)) ts++;
     seen.add(ts);
-    chartData.push({ time: ts, value: s.value });
+    chartData.push({ time: ts, value: toDisp(s.value) });
   }
   series.setData(chartData);
   _equityChart.timeScale().fitContent();
+
+  // MDD drawdown chart
+  const mddWrap = document.getElementById('mdd-chart-wrap');
+  const mddCanvas = document.getElementById('mdd-chart-canvas');
+  if (_mddChart) { _mddChart.remove(); _mddChart = null; }
+  mddCanvas.innerHTML = '';
+
+  // Compute drawdown series: % below running peak, always <= 0
+  const ddData = [];
+  let peak = -Infinity;
+  for (const pt of chartData) {
+    if (pt.value > peak) peak = pt.value;
+    const dd = peak > 0 ? ((pt.value - peak) / peak) * 100 : 0;
+    ddData.push({ time: pt.time, value: parseFloat(dd.toFixed(2)) });
+  }
+
+  const hasDrawdown = ddData.some(d => d.value < 0);
+  mddWrap.style.display = hasDrawdown ? 'block' : 'none';
+  if (!hasDrawdown) return;
+
+  _mddChart = LightweightCharts.createChart(mddCanvas, {
+    width:  mddCanvas.parentElement.offsetWidth,
+    height: 80,
+    layout: { background: { color: 'transparent' }, textColor: isDark ? '#8b949e' : '#6c757d' },
+    grid:   { vertLines: { color: isDark ? '#21262d' : '#e9ecef' }, horzLines: { color: isDark ? '#21262d' : '#e9ecef' } },
+    rightPriceScale: { borderVisible: false },
+    timeScale: { borderVisible: false, timeVisible: false },
+    crosshair: { mode: 1 },
+    handleScroll: false,
+    handleScale:  false,
+    localization: { priceFormatter: v => Math.round(v) + '%' },
+  });
+  const ddSeries = _mddChart.addAreaSeries({
+    lineColor:   '#ef5350',
+    topColor:    'rgba(239,83,80,0.2)',
+    bottomColor: 'rgba(0,0,0,0)',
+    lineWidth: 2,
+    priceFormat: { type: 'price', precision: 0, minMove: 1 },
+  });
+  ddSeries.setData(ddData);
+  _mddChart.timeScale().fitContent();
 }
 
 function renderAnalytics(d) {

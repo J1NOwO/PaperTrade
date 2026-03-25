@@ -32,6 +32,7 @@ I built this because most paper-trading platforms either restrict access behind 
 | **Real-time prices** | Live quotes via yfinance (US/Crypto) and pykrx (KR) with 30-second auto-refresh |
 | **Google Finance–style charts** | Candlestick (1M / 6M / YTD / 1Y / 5Y) and line/area (1D / 5D) with period tabs |
 | **Portfolio & P&L tracking** | Live unrealized P&L per holding, total return %, and balance overview |
+| **Equity curve & MDD** | Daily equity snapshots (recorded at midnight + every trade); area chart with KRW/USD toggle, peak equity, total return %, and Maximum Drawdown chart — leveraged borrowed capital excluded from all calculations |
 | **Currency exchange** | Real-time KRW ↔ USD conversion with live mid-market rate (yfinance KRW=X); 1.75% spread fee applied at order execution — fee breakdown (mid rate, spread %, applied rate, amount received) shown before confirmation |
 | **Multi-user authentication** | Per-user account with PBKDF2-SHA256 password hashing and session token auth |
 | **Fractional crypto trading** | Buy 0.00001 BTC — no minimum lot size enforced for crypto |
@@ -175,6 +176,8 @@ Stockr-Simulator/
 - **Korean market (pykrx) vs. US market (yfinance) data normalization** — KRX data uses Korean column names (`종가`, `시가`, etc.), date-only indices, and integer share lots, while yfinance returns timezone-aware timestamps and allows fractional shares. Wrapping both behind a unified `get_stock_info` / `get_chart_data` interface kept the API layer completely market-agnostic.
 
 - **Security without third-party auth libraries** — Implemented PBKDF2-SHA256 password hashing (260,000 iterations) and `secrets.compare_digest` for timing-safe comparison using only Python's stdlib, plus `secrets.token_urlsafe(32)` session tokens stored server-side — avoiding both JWT complexity and common token-in-cookie pitfalls.
+
+- **Accurate equity curve for leveraged and short positions** — Tracking portfolio equity correctly when leveraged positions are open required separating user capital from borrowed capital at every snapshot point. The solution computes equity as `(current_price × qty) − borrowed_amount` for long leverage and `margin + (entry − current) × qty` for shorts, fetching live prices at snapshot time and falling back to entry price on API failure. A nightly background thread records a snapshot for every user at local midnight, ensuring the curve has data even on trade-free days.
 
 ---
 
