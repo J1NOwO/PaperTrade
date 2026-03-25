@@ -12,7 +12,7 @@
 
 ## Demo
 
-![PaperTrade Screenshot](https://via.placeholder.com/800x400?text=Screenshot+Coming+Soon)
+> 📸 Demo screenshots coming soon — capturing live market data during the next trading session.
 
 > Live demo: `http://localhost:8000` (run locally — see [Getting Started](#getting-started))
 
